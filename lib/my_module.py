@@ -9,11 +9,6 @@ from scipy.interpolate import interp1d
 import pickle
 import itertools
 import os
-from matplotlib.colors import ListedColormap, to_rgb
-
-root_dir = Path.cwd().parent.parent.parent.parent
-sys.path.append(str(root_dir / 'common_data/common_config'))
-import ISTF_fid_params as ISTF_fid
 
 
 ###############################################################################
@@ -78,12 +73,13 @@ def test_folder_content(output_path, benchmarks_path, extension, verbose=False, 
         try:
             if extension == 'npz':
                 np.testing.assert_allclose(np.load(old_file_path)['arr_0'], np.load(new_file_path)['arr_0'],
-                                              verbose=verbose, rtol=rtol, atol=0)
+                                           verbose=verbose, rtol=rtol, atol=0)
             elif extension == 'npy':
-                np.testing.assert_allclose(np.load(old_file_path), np.load(new_file_path), verbose=verbose, rtol=rtol, atol=0)
+                np.testing.assert_allclose(np.load(old_file_path), np.load(new_file_path), verbose=verbose, rtol=rtol,
+                                           atol=0)
             elif extension == 'txt' or extension == 'dat':
                 np.testing.assert_allclose(np.genfromtxt(old_file_path), np.genfromtxt(new_file_path),
-                                              verbose=verbose, rtol=rtol, atol=0)
+                                           verbose=verbose, rtol=rtol, atol=0)
             else:
                 raise ValueError(f"Unknown extension: {extension}")
         except AssertionError as exc:
@@ -383,36 +379,6 @@ def mask_FM(FM, param_names_dict, fiducials_dict, params_tofix_dict, remove_null
                                                                                          remaining_fiducials_list)
 
     return FM, list(remaining_param_names_list), list(remaining_fiducials_list)
-
-
-def uncertainties_FM(FM, nparams, fiducials=None, which_uncertainty='marginal', normalize=True):
-    """
-    returns relative *percentage!* error
-    """
-
-    if which_uncertainty == 'marginal':
-        FM_inv = np.linalg.inv(FM)
-        sigma_FM = np.sqrt(np.diag(FM_inv))[:nparams] * 100
-    elif which_uncertainty == 'conditional':
-        sigma_FM = np.sqrt(1 / np.diag(FM))[:nparams] * 100
-    else:
-        raise ValueError('which_uncertainty must be either "marginal" or "conditional"')
-
-    if normalize:
-        fiducials = np.asarray(fiducials)  # turn list into array to make np.where work
-
-        assert fiducials.shape[0] == nparams, 'the fiducial must have the same length as the number of parameters'
-
-        if fiducials is None:
-            print('No fiducial values provided, using the ISTF values (for flat w0waCDM cosmology and no extensions)')
-            fiducials = np.asarray(list(ISTF_fid.primary.values())[:7])
-
-        # if the fiducial for is 0, substitute with 1 to avoid division by zero; if it's -1, take the absolute value
-        fiducials = np.where(fiducials == 0, 1, fiducials)
-        fiducials = np.where(fiducials == -1, 1, fiducials)
-        sigma_FM /= fiducials
-
-    return sigma_FM
 
 
 def build_labels_TeX(zbins):
@@ -1856,6 +1822,7 @@ def cov2corr(cov):
     d = np.sqrt(np.diag(cov))
     corr = cov / np.outer(d, d)
     return corr
+
 
 # compute Sylvain's deltas
 def delta_l_Sylvain(nbl, ell):
