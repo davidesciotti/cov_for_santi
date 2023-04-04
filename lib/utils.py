@@ -4,7 +4,6 @@ import warnings
 from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
-from numba import njit
 from scipy.interpolate import interp1d
 import pickle
 import itertools
@@ -12,91 +11,6 @@ import os
 
 
 ###############################################################################
-
-
-def test_folder_content_old(output_path, benchmarks_path, extension):
-    """tests that the outputs do not change between the old and the new version"""
-    old_dict = dict(get_kv_pairs(benchmarks_path, extension))
-    new_dict = dict(get_kv_pairs(output_path, extension))
-
-    # check if the dictionaries are empty
-    assert len(old_dict) > 0, 'No files in the benchmarks path ❌'
-    assert len(new_dict) > 0, 'No files in the output path ❌'
-
-    assert old_dict.keys() == new_dict.keys(), 'The number of files or their names has changed ❌'
-
-    for key in old_dict.keys():
-        try:
-            if extension == 'npz':
-                np.array_equal(old_dict[key]['arr_0'], new_dict[key]['arr_0'])
-            else:
-                np.array_equal(old_dict[key], new_dict[key])
-        except AssertionError:
-            f'The file {benchmarks_path}/{key}.{extension} is different ❌'
-
-    print('tests passed successfully: the new files are equal to the benchmarks ✅')
-
-
-def test_folder_content(output_path, benchmarks_path, extension, verbose=False, rtol=1e-10):
-    """Test if the files in the output folder are equal to the benchmark files.
-
-    Parameters:
-    output_path (str): The path to the folder containing the output files.
-    benchmarks_path (str): The path to the folder containing the benchmark files.
-    extension (str): The extension of the files to be tested.
-
-    Returns:
-    None.
-    """
-    old_files = os.listdir(benchmarks_path)
-    new_files = os.listdir(output_path)
-
-    if 'benchmarks' in new_files:
-        new_files.remove('benchmarks')
-
-    # ignore hidden files
-    old_files = [file for file in old_files if not file.startswith('.')]
-    new_files = [file for file in new_files if not file.startswith('.')]
-
-    assert old_files, f"No files found in the benchmarks path: {benchmarks_path} ❌"
-    assert new_files, f"No files found in the output path: {output_path} ❌"
-    assert set(old_files) == set(new_files), f"The number or name of files in the benchmark folder and output " \
-                                             f"folder do not match ❌\n" \
-                                             f"files which do not match: {set(old_files) ^ set(new_files)}"
-
-    print(f'\n**** testing files in folder: *****\n{output_path}\n')
-
-    for file_name in old_files:
-        old_file_path = os.path.join(benchmarks_path, file_name)
-        new_file_path = os.path.join(output_path, file_name)
-
-        try:
-            if extension == 'npz':
-                np.testing.assert_allclose(np.load(old_file_path)['arr_0'], np.load(new_file_path)['arr_0'],
-                                           verbose=verbose, rtol=rtol, atol=0)
-            elif extension == 'npy':
-                np.testing.assert_allclose(np.load(old_file_path), np.load(new_file_path), verbose=verbose, rtol=rtol,
-                                           atol=0)
-            elif extension == 'txt' or extension == 'dat':
-                np.testing.assert_allclose(np.genfromtxt(old_file_path), np.genfromtxt(new_file_path),
-                                           verbose=verbose, rtol=rtol, atol=0)
-            else:
-                raise ValueError(f"Unknown extension: {extension}")
-        except AssertionError as exc:
-            print(f'\nFile {file_name} ❌:', exc)
-        else:
-            print(f'The file {file_name} is equal to the benchmarks ✅')
-
-    return None
-
-
-def is_increasing(arr):
-    return np.all(np.diff(arr) > 0)
-
-
-def pycharm_exit():
-    assert 1 > 2, 'aborting execution'
-
 
 def save_pickle(filename, obj):
     with open(f'{filename}', 'wb') as handle:
@@ -120,7 +34,16 @@ def load_compressed_pickle(file):
     return data
 
 
-@njit
+
+def symmetrize_Cl(Cl, nbl, zbins):
+    for ell in range(nbl):
+        for i in range(zbins):
+            for j in range(zbins):
+                Cl[ell, j, i] = Cl[ell, i, j]
+    return Cl
+
+
+
 def percent_diff(array_1, array_2, abs_value=False):
     diff = (array_1 / array_2 - 1) * 100
     if abs_value:
@@ -129,7 +52,7 @@ def percent_diff(array_1, array_2, abs_value=False):
         return diff
 
 
-@njit
+
 def percent_diff_mean(array_1, array_2):
     """
     result is in "percent" units
@@ -139,7 +62,7 @@ def percent_diff_mean(array_1, array_2):
     return diff
 
 
-@njit
+
 def percent_diff_nan(array_1, array_2, eraseNaN=True, log=False, abs_val=False):
     if eraseNaN:
         diff = np.where(array_1 == array_2, 0, percent_diff(array_1, array_2))
@@ -238,237 +161,6 @@ def compare_arrays(A, B, name_A='A', name_B='B', plot_diff=False, plot_array=Fal
     print(f'Are A and B different by less than {higher_rtol}%? {result_emoji} {additional_info}')
 
 
-def compare_folder_content(path_A: str, path_B: str, filetype: str):
-    """
-    Compare the content of 2 folders. The files in folder A should be a subset of the files in folder B.
-    """
-    dict_A = dict(get_kv_pairs(path_A, filetype))
-    dict_B = dict(get_kv_pairs(path_B, filetype))
-
-    for key in dict_A.keys():
-        if np.array_equal(dict_A[key], dict_B[key]):
-            result_emoji = '✅'
-        else:
-            result_emoji = '❌'
-        print(f'is {key} equal in both folders? {result_emoji}')
-
-
-def namestr(obj, namespace):
-    """ does not work with slices!!! (why?)"""
-    return [name for name in namespace if namespace[name] is obj][0]
-
-
-def plot_FM(array, style=".-"):
-    name = namestr(array, globals())
-    plt.plot(range(7), array, style, label=name)
-
-
-################################################ Fisher Matrix utilities ################################################
-def find_null_rows_cols_2D(array):
-    """
-    :param array:
-
-    :return null_rows_idxs: list
-        array of null rows/columns indices
-    """
-    assert array.ndim == 2, 'ndim should be <= 2; higher-dimensional case not yet implemented'
-    null_rows_idxs = np.where(np.all(array == 0, axis=0))[0]
-    null_cols_idxs = np.where(np.all(array == 0, axis=1))[0]
-
-    assert np.array_equal(null_rows_idxs, null_cols_idxs), \
-        'null rows and columns indices should be the same for Fisher matrices'
-
-    if null_rows_idxs.shape[0] == 0:
-        print('The input array has no null rows/columns')
-        return None
-    else:
-        print(f'The input array had null rows and columns at indices {null_rows_idxs}')
-        return null_rows_idxs
-
-
-def remove_rows_cols_array2D(array, rows_idxs_to_remove):
-    """
-    Removes the *same* rows and columns from an array
-    :param array: numpy.ndarray. input 2D array
-    :param rows_idxs_to_remove: list. rows (and columns) to delete
-    :return: array without null rows and columns
-    """
-    if rows_idxs_to_remove is None:
-        warnings.warn('null_rows_idxs is None, returning the input array')
-        return array
-
-    if len(rows_idxs_to_remove) == 0:
-        warnings.warn('null_rows_idxs is empty, returning the input array')
-        return array
-
-    assert array.ndim == 2, 'ndim should be <= 2; higher-dimensional case not yet implemented'
-    array = np.delete(array, rows_idxs_to_remove, axis=0)
-    array = np.delete(array, rows_idxs_to_remove, axis=1)
-    return array
-
-
-def remove_null_rows_cols_2D_copilot(array_2d):
-    """
-    Remove null rows and columns from a 2D array - version by GitHub Copilot
-    """
-
-    assert array_2d.ndim == 2, 'ndim should be <= 2; higher-dimensional case not yet implemented'
-    array_2d = array_2d[~np.all(array_2d == 0, axis=1)]
-    array_2d = array_2d[:, ~np.all(array_2d == 0, axis=0)]
-    return array_2d
-
-
-def mask_FM_null_rowscols(FM, params, fid):
-    """
-    Mask the Fisher matrix, fiducial values and parameter list deleting the null rows and columns
-    :param FM: Fisher Matrix, 2D numpy array
-    :return: masked FM, fiducial values and parameter list
-    """
-    null_idx = find_null_rows_cols_2D(FM)
-
-    if null_idx is None:
-        return FM, params, fid
-
-    FM = remove_rows_cols_array2D(FM, null_idx)
-    params = np.delete(params, obj=null_idx, axis=0)
-    fid = np.delete(fid, obj=null_idx, axis=0)
-    assert len(fid) == len(params), 'the fiducial values and parameter lists should have the same length'
-    return FM, list(params), list(fid)
-
-
-def mask_FM(FM, param_names_dict, fiducials_dict, params_tofix_dict, remove_null_rows_cols=True):
-    """
-    Trim the Fisher matrix to remove null rows/columns and/or fix nuisance parameters
-    :param FM:
-    :param remaining_param_names_list:
-    :param fid:
-    :param n_cosmo_params:
-    :param kwargs:
-    :return:
-    """
-
-    # join param_names_dict.values() into single list
-    all_param_names_list = list(itertools.chain(*list(param_names_dict.values())))
-    all_fiducials_list = list(itertools.chain(*list(fiducials_dict.values())))
-
-    # TODO - add option to fix specific parameter
-    # TODO  - test this!!
-    idx_todelete = []
-    for key in params_tofix_dict.keys():
-        if params_tofix_dict[key]:
-            _param_names_list = param_names_dict[key]
-            param_idxs = [all_param_names_list.index(param_name) for param_name in _param_names_list]
-            idx_todelete.append(param_idxs)
-
-    # make a continuous list
-    # idx_todelete = np.flatten(idx_todelete.flatten())
-    idx_todelete = list(itertools.chain(*idx_todelete))
-
-    if idx_todelete:
-        FM = np.delete(FM, idx_todelete, axis=0)
-        FM = np.delete(FM, idx_todelete, axis=1)
-        remaining_param_names_list = np.delete(all_param_names_list, idx_todelete)
-        remaining_fiducials_list = np.delete(all_fiducials_list, idx_todelete)
-    else:
-        remaining_param_names_list = all_param_names_list
-        remaining_fiducials_list = all_fiducials_list
-
-    # remove remaining null rows_cols
-    if remove_null_rows_cols:
-        FM, remaining_param_names_list, remaining_fiducials_list = mask_FM_null_rowscols(FM, remaining_param_names_list,
-                                                                                         remaining_fiducials_list)
-
-    return FM, list(remaining_param_names_list), list(remaining_fiducials_list)
-
-
-def build_labels_TeX(zbins):
-    galaxy_bias_label = ['$b_{%i}$' % (i + 1) for i in range(zbins)]
-    shear_bias_label = ['$m_{%i}$' % (i + 1) for i in range(zbins)]
-    zmean_shift_label = ['$dz_{%i}$' % (i + 1) for i in range(zbins)]
-    return [galaxy_bias_label, shear_bias_label, zmean_shift_label]
-
-
-def build_labels(zbins):
-    galaxy_bias_label = ['b%i' % (i + 1) for i in range(zbins)]
-    shear_bias_label = ['m%i' % (i + 1) for i in range(zbins)]
-    zmean_shift_label = ['dz%i' % (i + 1) for i in range(zbins)]
-    return [galaxy_bias_label, shear_bias_label, zmean_shift_label]
-
-
-def matshow(array, title="title", log=False, abs_val=False, threshold=None):
-    """
-    :param array:
-    :param title:
-    :param log:
-    :param abs_val:
-    :param threshold: if None, do not mask the values; otherwise, keep only the elements above the threshold
-    (i.e., mask the ones below the threshold)
-    :return:
-    """
-    # the ordering of these is important: I want the log(abs), not abs(log)
-    if abs_val:  # take the absolute value
-        array = np.abs(array)
-        title = 'abs ' + title
-    if log:  # take the log
-        array = np.log10(array)
-        title = 'log10 ' + title
-
-    if threshold is not None:
-        array = np.ma.masked_where(array < threshold, array)
-        title += f" (\nmasked below {threshold})"
-
-    plt.matshow(array)
-    plt.colorbar()
-    plt.title(title)
-
-
-# load txt or dat files in dictionary
-def get_kv_pairs(path_import, extension='npy'):
-    """
-    to use it, wrap it in "dict(), e.g.:
-        loaded_dict = dict(get_kv_pairs(path_import, filetype="dat"))
-    """
-    if extension == 'npy' or extension == 'npz':
-        load_function = np.load
-    elif extension == 'txt' or extension == 'dat':
-        load_function = np.genfromtxt
-    else:
-        raise NotImplementedError("extension must be either 'npy', 'npz', 'txt' or 'dat'")
-
-    for path in Path(path_import).glob(f"*.{extension}"):
-        yield path.stem, load_function(str(path))
-
-
-# to display the names (keys) more tidily
-def show_keys(arrays_dict):
-    for key in arrays_dict:
-        print(key)
-
-
-def cl_interpolator(cl_2D, zpairs, new_ell_values, nbl, kind='linear'):
-    original_ell_values = cl_2D[:, 0]
-    cl_interpolated = np.zeros((nbl, zpairs))
-    for zpair_idx in range(zpairs):
-        f = interp1d(original_ell_values, cl_2D[:, zpair_idx + 1], kind=kind)
-        cl_interpolated[:, zpair_idx] = f(new_ell_values)
-    return cl_interpolated
-
-
-# def cl_interpolator_no_1st_column(npairs, cl_2D, original_ell_values, new_ell_values, nbl):
-#     Cl_interpolated = np.zeros((nbl, npairs))
-#     for j in range(npairs):
-#         f = interp1d(original_ell_values, cl_2D[:, j], kind='linear')
-#         Cl_interpolated[:, j] = f(new_ell_values)
-#     return Cl_interpolated
-
-
-@njit
-def symmetrize_Cl(Cl, nbl, zbins):
-    for ell in range(nbl):
-        for i in range(zbins):
-            for j in range(zbins):
-                Cl[ell, j, i] = Cl[ell, i, j]
-    return Cl
 
 
 def generate_ind(triu_tril_square, row_col_major, size):
@@ -606,7 +298,7 @@ def Cl_3D_to_2D_asymmetric(Cl_3D):
     return Cl_2D
 
 
-@njit
+
 def cl_1D_to_3D(cl_1d, nbl: int, zbins: int, is_symmetric: bool):
     """ This is used to unpack Vincenzo's files for SPV3
     Still to be thoroughly checked."""
@@ -643,7 +335,7 @@ def array_2D_to_3D_ind(array_2D, nbl, zbins, ind, start, stop):
     return array_3D
 
 
-# @njit
+# 
 def symmetrize_2d_array(array_2d):
     """ mirror the lower/upper triangle """
 
@@ -721,90 +413,6 @@ def interpolator(dC_interpolated_dict, dC_dict, obs_name, params_names, nbl, zpa
     return dC_interpolated_dict
 
 
-# @njit
-def fill_dC_array(params_names, dC_interpolated_dict, probe_code, dC, suffix):
-    for (counter, param) in enumerate(params_names):
-        dC[:, :, counter] = dC_interpolated_dict[f"dCij{probe_code}d{param}-{suffix}"]
-    return dC
-
-
-def fill_datavector_4D(nParams, nbl, npairs, zbins, ind, dC_4D):
-    # XXX pairs_tot
-    D_4D = np.zeros((nbl, zbins, zbins, nParams))
-
-    for alf in range(nParams):
-        for elle in range(nbl):
-            for p in range(npairs):
-                if ind[p, 0] == 0 and ind[p, 1] == 0:
-                    D_4D[elle, ind[p, 2], ind[p, 3], alf] = dC_4D[elle, ind[p, 2], ind[p, 3], alf]
-    return D_4D
-
-
-@njit
-def datavector_3D_to_2D(D_3D, nParams, nbl, npairs):
-    D_2D = np.zeros((npairs * nbl, nParams))
-    for alf in range(nParams):
-        count = 0
-        for elle in range(nbl):
-            for p in range(npairs):
-                D_2D[count, alf] = D_3D[elle, p, alf]
-                count = count + 1
-    return D_2D
-
-
-# @njit
-def compute_FM_3D(nbl, npairs, nParams, cov_inv, D_3D):
-    """ Compute FM using 3D datavector - 2D + the cosmological parameter axis - and 3D covariance matrix (working but
-    deprecated in favor of compute_FM_2D)"""
-    b = np.zeros((nbl, npairs, nParams))
-    FM = np.zeros((nParams, nParams))
-    for alf in range(nParams):
-        for bet in range(nParams):
-            for elle in range(nbl):
-                b[elle, :, bet] = cov_inv[elle, :, :] @ D_3D[elle, :, bet]
-                FM[alf, bet] = FM[alf, bet] + (D_3D[elle, :, alf] @ b[elle, :, bet])
-    return FM
-
-
-# @njit
-def compute_FM_2D(nbl, npairs, nparams_tot, cov_2D_inv, D_2D):
-    """ Compute FM using 2D datavector - 1D + the cosmological parameter axis - and 2D covariance matrix"""
-    b = np.zeros((nbl * npairs, nparams_tot))
-    FM = np.zeros((nparams_tot, nparams_tot))
-    for alf in range(nparams_tot):
-        for bet in range(nparams_tot):
-            b[:, bet] = cov_2D_inv[:, :] @ D_2D[:, bet]
-            FM[alf, bet] = D_2D[:, alf] @ b[:, bet]
-    return FM
-
-
-def compute_FM_2D_optimized(nbl, npairs, nparams_tot, cov_2D_inv, D_2D):
-    """ Compute FM using 2D datavector - 1D + the cosmological parameter axis - and 2D covariance matrix"""
-    warnings.warn('deprecate this?')
-    b = np.zeros((nbl * npairs, nparams_tot))
-    FM = np.zeros((nparams_tot, nparams_tot))
-    for alf in range(nparams_tot):
-        for bet in range(nparams_tot):
-            b[:, bet] = cov_2D_inv[:, :] @ D_2D[:, bet]
-            FM[alf, bet] = D_2D[:, alf] @ b[:, bet]
-
-    # do it with np.einsum in one line
-    # FM = np.einsum('ij,ik,jk->ij', D_2D, b, cov_2D_inv)
-    b = np.einsum('ij,jk->ik', cov_2D_inv, D_2D)
-    FM = np.einsum('ij,jk->ik', D_2D, b)
-    return FM
-
-
-def compute_FoM(FM, w0wa_idxs=(2, 3)):
-    print('rows/cols 2 and 3 for w0, wa')
-    start = w0wa_idxs[0]
-    stop = w0wa_idxs[1] + 1
-    cov_param = np.linalg.inv(FM)
-    cov_param_reduced = cov_param[start:stop, start:stop]
-    FM_reduced = np.linalg.inv(cov_param_reduced)
-    FoM = np.sqrt(np.linalg.det(FM_reduced))
-    return FoM
-
 
 def get_ind_file(path, ind_ordering, which_forecast):
     if ind_ordering == 'vincenzo' or which_forecast == 'sylvain':
@@ -847,7 +455,7 @@ def get_zpairs(zbins):
 # TODO unify these 3 into a single function
 # TODO workaround for start_index, stop_index (super easy)
 
-@njit
+
 def covariance(nbl, npairs, start_index, stop_index, Cij, noise, l_lin, delta_l, fsky, ind):
     # create covariance array
     covariance = np.zeros((nbl, nbl, npairs, npairs))
@@ -959,7 +567,7 @@ def cov_10D_array_to_dict(cov_10D_array, n_probes=2):
     return cov_10D_dict
 
 
-# @njit
+# 
 def covariance_WA(nbl, npairs, start_index, stop_index, Cij, noise, l_lin, delta_l, fsky, ind, ell_WA):
     covariance = np.zeros((nbl, nbl, npairs, npairs))
 
@@ -982,7 +590,7 @@ def covariance_WA(nbl, npairs, start_index, stop_index, Cij, noise, l_lin, delta
 
 
 # covariance matrix for ALL
-@njit
+
 def covariance_ALL(nbl, npairs, Cij, noise, l_lin, delta_l, fsky, ind):
     # create covariance array
     cov_GO = np.zeros((nbl, nbl, npairs, npairs))
@@ -1001,7 +609,7 @@ def covariance_ALL(nbl, npairs, Cij, noise, l_lin, delta_l, fsky, ind):
     return cov_GO
 
 
-@njit
+
 def cov_SSC_old(nbl, npairs, ind, Cij, Sijkl, fsky, probe, zbins, Rl):
     if probe in ["WL", "WA"]:
         shift = 0
@@ -1025,7 +633,7 @@ def cov_SSC_old(nbl, npairs, ind, Cij, Sijkl, fsky, probe, zbins, Rl):
     return cov_SSC
 
 
-@njit
+
 def cov_SSC(nbl, zpairs, ind, Cij, Sijkl, fsky, probe, zbins, Rl):
     if probe in ["WL", "WA"]:
         shift = 0
@@ -1048,7 +656,7 @@ def cov_SSC(nbl, zpairs, ind, Cij, Sijkl, fsky, probe, zbins, Rl):
     return cov_SSC
 
 
-@njit
+
 def build_Sijkl_dict(Sijkl, zbins):
     # build probe lookup dictionary, to set the right start and stop values
     probe_lookup = {
@@ -1077,7 +685,7 @@ def build_Sijkl_dict(Sijkl, zbins):
     return Sijkl_dict
 
 
-@njit
+
 def build_3x2pt_dict(array_3x2pt):
     dict_3x2pt = {}
     if array_3x2pt.ndim == 5:
@@ -1094,7 +702,7 @@ def build_3x2pt_dict(array_3x2pt):
 
 
 # ! to be deprecated
-@njit
+
 def cov_SS_3x2pt_10D_dict_nofsky_old(nbl, cl_3x2pt, Sijkl, zbins, response_3x2pt, probe_ordering):
     """Buil the 3x2pt covariance matrix using a dict for the response, the cls and Sijkl.
     Slightly slower (because of the use of dicts, I think) but much cleaner (no need for multiple if statements).
@@ -1143,7 +751,7 @@ def cov_SS_3x2pt_10D_dict_old(nbl, cl_3x2pt, Sijkl, fsky, zbins, response_3x2pt,
     return cov_3x2pt_SS_10D
 
 
-@njit
+
 def cov_SSC_ALL(nbl, npairs_tot, ind, D_3x2pt, Sijkl, fsky, zbins, Rl):
     """The fastest routine to compute the SSC covariance matrix.
     """
@@ -1169,7 +777,7 @@ def cov_SSC_ALL(nbl, npairs_tot, ind, D_3x2pt, Sijkl, fsky, zbins, Rl):
 
 
 # ! to be deprecated
-@njit
+
 def cov_SSC_ALL_dict(nbl, npairs_tot, ind, D_3x2pt, Sijkl, fsky, zbins, Rl):
     """Buil the 3x2pt covariance matrix using a dict for Sijkl. slightly slower (because of the use of dicts, I think)
     but cleaner (no need for multiple if statements, except to set the correct probes).
@@ -1269,7 +877,7 @@ def cov_SS_10D_dict(Cl_dict, Rl_dict, Sijkl_dict, nbl, zbins, fsky, probe_orderi
 # but it has to be called once for each block combination (see cov_blocks_LG_4D
 # and cov_blocks_GL_4D)
 # best used in combination with cov_10D_dictionary
-@njit
+
 def cov_GO_6D_blocks(C_AC, C_BD, C_AD, C_BC, N_AC, N_BD, N_AD, N_BC, nbl, zbins, l_lin, delta_l, fsky):
     cov_GO_6D = np.zeros((nbl, nbl, zbins, zbins, zbins, zbins))
     for ell in range(nbl):
@@ -1286,7 +894,7 @@ def cov_GO_6D_blocks(C_AC, C_BD, C_AD, C_BC, N_AC, N_BD, N_AD, N_BC, nbl, zbins,
     return cov_GO_6D
 
 
-@njit
+
 def cov_SS_6D_blocks(Rl_AB, Cl_AB, Rl_CD, Cl_CD, Sijkl_ABCD, nbl, zbins, fsky):
     """ experimental"""
     cov_SS_6D = np.zeros((nbl, nbl, zbins, zbins, zbins, zbins))
@@ -1379,7 +987,7 @@ def cov_3x2pt_dict_10D_to_4D(cov_3x2pt_dict_10D, probe_ordering, nbl, zbins, ind
 
 
 # ! to be deprecated
-@njit
+
 def symmetrize_ij(cov_6D, zbins):
     warnings.warn('THIS FUNCTION ONLY WORKS IF THE MATRIX TO SYMMETRIZE IS UPPER *OR* LOWER TRIANGULAR, NOT BOTH')
     # TODO thorough check?
@@ -1390,7 +998,7 @@ def symmetrize_ij(cov_6D, zbins):
     return cov_6D
 
 
-# @njit
+# 
 # ! this function is new - still to be thouroughly tested
 def cov_4D_to_6D(cov_4D, nbl, zbins, probe, ind):
     """transform the cov from shape (nbl, nbl, npairs, npairs) 
@@ -1431,7 +1039,7 @@ def cov_4D_to_6D(cov_4D, nbl, zbins, probe, ind):
     return cov_6D
 
 
-# @njit
+# 
 def cov_6D_to_4D(cov_6D, nbl, zpairs, ind):
     """transform the cov from shape (nbl, nbl, zbins, zbins, zbins, zbins) 
     to (nbl, nbl, zpairs, zpairs)"""
@@ -1446,7 +1054,7 @@ def cov_6D_to_4D(cov_6D, nbl, zpairs, ind):
     return cov_4D
 
 
-@njit
+
 def cov_6D_to_4D_blocks(cov_6D, nbl, npairs_AB, npairs_CD, ind_AB, ind_CD):
     """ reshapes the covariance even for the non-diagonal (hence, non-square) blocks needed to build the 3x2pt.
     use npairs_AB = npairs_CD and ind_AB = ind_CD for the normal routine (valid for auto-covariance 
@@ -1478,7 +1086,7 @@ def return_combinations(A, B, C, D):
 
 
 ###########################
-# @njit
+# 
 def check_symmetric(array_2d, exact, rtol=1e-05):
     """
     :param a: 2d array
@@ -1496,7 +1104,7 @@ def check_symmetric(array_2d, exact, rtol=1e-05):
         return np.allclose(array_2d, array_2d.T, rtol=rtol, atol=0)
 
 
-@njit
+
 # reshape from 3 to 4 dimensions
 def array_3D_to_4D(cov_3D, nbl, npairs):
     print('XXX THIS FUNCTION ONLY WORKS FOR GAUSS-ONLY COVARIANCE')
@@ -1508,7 +1116,7 @@ def array_3D_to_4D(cov_3D, nbl, npairs):
     return cov_4D
 
 
-# @njit
+# 
 def cov_2D_to_4D(cov_2D, nbl, block_index='vincenzo'):
     """ new (more elegant) version of cov_2D_to_4D. Also works for 3x2pt. The order
     of the for loops does not affect the result!
@@ -1551,7 +1159,7 @@ def cov_2D_to_4D(cov_2D, nbl, block_index='vincenzo'):
     return cov_4D
 
 
-@njit
+
 def cov_4D_to_2D(cov_4D, block_index='vincenzo'):
     """ new (more elegant) version of cov_4D_to_2D. Also works for 3x2pt. The order
     of the for loops does not affect the result!
@@ -1603,7 +1211,7 @@ def cov_4D_to_2D(cov_4D, block_index='vincenzo'):
     return cov_2D
 
 
-@njit
+
 def cov_4D_to_2D_v0(cov_4D, nbl, zpairs_AB, zpairs_CD=None, block_index='vincenzo'):
     """ new (more elegant) version of cov_4D_to_2D. Also works for 3x2pt. The order
     of the for loops does not affect the result!
@@ -1658,7 +1266,7 @@ def cov_4D_to_2D_v0(cov_4D, nbl, zpairs_AB, zpairs_CD=None, block_index='vincenz
     return cov_2D
 
 
-# @njit
+# 
 def cov_4D_to_2DCLOE_3x2pt(cov_4D, nbl, zbins, block_index='vincenzo'):
     """
     Reshape according to the "multi-diagonal", non-square blocks 2D_CLOE ordering. Note that this is only necessary for
@@ -1699,7 +1307,7 @@ def cov_4D_to_2DCLOE_3x2pt(cov_4D, nbl, zbins, block_index='vincenzo'):
     return array_2D
 
 
-# @njit
+# 
 def cov_2DCLOE_to_4D_3x2pt(cov_2D, nbl, zbins, block_index='vincenzo'):
     """
     Reshape according to the "multi-diagonal", non-square blocks 2D_CLOE ordering. Note that this is only necessary for
@@ -1930,7 +1538,7 @@ def my_exit():
 
 
 ########################### SYLVAINS FUNCTIONS ################################
-@njit
+
 def cov_4D_to_2D_sylvains_ord(cov_4D, nbl, npairs):
     """Reshape from 2D to 4D using Sylvain's ordering"""
     cov_2D = np.zeros((nbl * npairs, nbl * npairs))
@@ -1942,7 +1550,7 @@ def cov_4D_to_2D_sylvains_ord(cov_4D, nbl, npairs):
     return cov_2D
 
 
-@njit
+
 def cov_2D_to_4D_sylvains_ord(cov_2D, nbl, npairs):
     """Reshape from 4D to 2D using Sylvain's ordering"""
     cov_4D = np.zeros((nbl, nbl, npairs, npairs))
@@ -1984,7 +1592,7 @@ def Cl_3D_to_1D(Cl_3D, nbl, npairs, ind, block_index='ij'):
 ########################### OLD FUNCTIONS ##############################################################################
 ########################################################################################################################
 
-@njit
+
 def cov_SSC_ALL_old_improved(nbl, npairs_tot, ind, D_3x2pt, Sijkl, fsky, zbins, Rl):
     """The fastest routine to compute the SSC covariance matrix.
     Implements the new shift, which is much better (no ifs!!!)
@@ -2010,124 +1618,10 @@ def cov_SSC_ALL_old_improved(nbl, npairs_tot, ind, D_3x2pt, Sijkl, fsky, zbins, 
     return cov_ALL_SSC
 
 
-@njit
-def cov_SSC_ALL_old(nbl, npairs_tot, ind, D_ALL, Sijkl, fsky, zbins, Rl):
-    """Not the most elegant, but fast!
-    """
-
-    cov_ALL_SSC = np.zeros((nbl, nbl, npairs_tot, npairs_tot))
-    for ell1 in range(nbl):
-        for ell2 in range(nbl):
-            for p in range(npairs_tot):
-                for q in range(npairs_tot):
-
-                    # LL_LL
-                    if ind[p, 0] == 0 and ind[p, 1] == 0 and ind[q, 0] == 0 and ind[q, 1] == 0:
-                        cov_ALL_SSC[ell1, ell2, p, q] = (Rl * Rl *
-                                                         D_ALL[ell1, ind[p, 0], ind[p, 1], ind[p, 2], ind[p, 3]] *
-                                                         D_ALL[ell2, ind[q, 0], ind[q, 1], ind[q, 2], ind[q, 3]] *
-                                                         Sijkl[ind[p, 2], ind[p, 3], ind[q, 2], ind[q, 3]])
-                    # LL_GL
-                    elif ind[p, 0] == 0 and ind[p, 1] == 0 and ind[q, 0] == 1 and ind[q, 1] == 0:
-                        cov_ALL_SSC[ell1, ell2, p, q] = (Rl * Rl *
-                                                         D_ALL[ell1, ind[p, 0], ind[p, 1], ind[p, 2], ind[p, 3]] *
-                                                         D_ALL[ell2, ind[q, 0], ind[q, 1], ind[q, 2], ind[q, 3]] *
-                                                         Sijkl[ind[p, 2], ind[p, 3], ind[q, 2] + zbins, ind[q, 3]])
-                    # LL_GG
-                    elif ind[p, 0] == 0 and ind[p, 1] == 0 and ind[q, 0] == 1 and ind[q, 1] == 1:
-                        cov_ALL_SSC[ell1, ell2, p, q] = (Rl * Rl *
-                                                         D_ALL[ell1, ind[p, 0], ind[p, 1], ind[p, 2], ind[p, 3]] *
-                                                         D_ALL[ell2, ind[q, 0], ind[q, 1], ind[q, 2], ind[q, 3]] *
-                                                         Sijkl[ind[p, 2], ind[p, 3], ind[q, 2] + zbins, ind[
-                                                             q, 3] + zbins])
-
-                    # GL_LL
-                    elif ind[p, 0] == 1 and ind[p, 1] == 0 and ind[q, 0] == 0 and ind[q, 1] == 0:
-                        cov_ALL_SSC[ell1, ell2, p, q] = (Rl * Rl *
-                                                         D_ALL[ell1, ind[p, 0], ind[p, 1], ind[p, 2], ind[p, 3]] *
-                                                         D_ALL[ell2, ind[q, 0], ind[q, 1], ind[q, 2], ind[q, 3]] *
-                                                         Sijkl[ind[p, 2] + zbins, ind[p, 3], ind[q, 2], ind[q, 3]])
-                    # GL_GL
-                    elif ind[p, 0] == 1 and ind[p, 1] == 0 and ind[q, 0] == 1 and ind[q, 1] == 0:
-                        cov_ALL_SSC[ell1, ell2, p, q] = (Rl * Rl *
-                                                         D_ALL[ell1, ind[p, 0], ind[p, 1], ind[p, 2], ind[p, 3]] *
-                                                         D_ALL[ell2, ind[q, 0], ind[q, 1], ind[q, 2], ind[q, 3]] *
-                                                         Sijkl[ind[p, 2] + zbins, ind[p, 3], ind[q, 2] + zbins, ind[
-                                                             q, 3]])
-                    # GL_GG
-                    elif ind[p, 0] == 1 and ind[p, 1] == 0 and ind[q, 0] == 1 and ind[q, 1] == 1:
-                        cov_ALL_SSC[ell1, ell2, p, q] = (Rl * Rl *
-                                                         D_ALL[ell1, ind[p, 0], ind[p, 1], ind[p, 2], ind[p, 3]] *
-                                                         D_ALL[ell2, ind[q, 0], ind[q, 1], ind[q, 2], ind[q, 3]] *
-                                                         Sijkl[ind[p, 2] + zbins, ind[p, 3], ind[q, 2] + zbins, ind[
-                                                             q, 3] + zbins])
-
-                    # GG_LL
-                    elif ind[p, 0] == 1 and ind[p, 1] == 1 and ind[q, 0] == 0 and ind[q, 1] == 0:
-                        cov_ALL_SSC[ell1, ell2, p, q] = (Rl * Rl *
-                                                         D_ALL[ell1, ind[p, 0], ind[p, 1], ind[p, 2], ind[p, 3]] *
-                                                         D_ALL[ell2, ind[q, 0], ind[q, 1], ind[q, 2], ind[q, 3]] *
-                                                         Sijkl[ind[p, 2] + zbins, ind[p, 3] + zbins, ind[q, 2], ind[
-                                                             q, 3]])
-                    # GG_GL
-                    elif ind[p, 0] == 1 and ind[p, 1] == 1 and ind[q, 0] == 1 and ind[q, 1] == 0:
-                        cov_ALL_SSC[ell1, ell2, p, q] = (Rl * Rl *
-                                                         D_ALL[ell1, ind[p, 0], ind[p, 1], ind[p, 2], ind[p, 3]] *
-                                                         D_ALL[ell2, ind[q, 0], ind[q, 1], ind[q, 2], ind[q, 3]] *
-                                                         Sijkl[ind[p, 2] + zbins, ind[p, 3] + zbins, ind[q, 2] + zbins,
-                                                         ind[q, 3]])
-                    # GG_GG
-                    elif ind[p, 0] == 1 and ind[p, 1] == 1 and ind[q, 0] == 1 and ind[q, 1] == 1:
-                        cov_ALL_SSC[ell1, ell2, p, q] = (Rl * Rl *
-                                                         D_ALL[ell1, ind[p, 0], ind[p, 1], ind[p, 2], ind[p, 3]] *
-                                                         D_ALL[ell2, ind[q, 0], ind[q, 1], ind[q, 2], ind[q, 3]] *
-                                                         Sijkl[ind[p, 2] + zbins, ind[p, 3] + zbins, ind[q, 2] + zbins,
-                                                               ind[q, 3] + zbins])
-    cov_ALL_SSC /= fsky
-    return cov_ALL_SSC
-
-
-# @njit # not usable with dictionaries
-def covariance_6D_dictionary_slow(cl_dict, noise_dict, nbl, zbins, l_lin, delta_l, fsky, probe_ordering):
-    """
-    A universal 6D covmat function, which mixes the indices automatically. 
-    This one works with dictionaries, in particular for the cls and noise arrays. 
-    probe_ordering = ['L', 'L'] or ['G', 'G'] for the individual probes, and
-    probe_ordering = [['L', 'L'], ['L', 'G'], ['G', 'G']] (or variations)
-    for the 3x2pt case.
-    Note that, adding together the different datavectors, cov_3x2pt_6D needs
-    probe indices, becoming 10D (maybe a (nbl, nbl, 3*zbins, 3*zbins, 3*zbins, 3*zbins))
-    shape would work? Anyway, much less convenient to work with.
-    
-    this version is slower (but easier to read), it uses dictionaries directly 
-    and cannot make use of numba jit
-    """
-
-    cov_10D_dict = {}
-    cov_6D_arr = np.zeros((nbl, nbl, zbins, zbins, zbins, zbins))
-    for A, B in probe_ordering:
-        for C, D in probe_ordering:
-            # this was the error: the array has to be initialized at every probe iteration!!!!
-            cov_6D_arr = np.zeros((nbl, nbl, zbins, zbins, zbins, zbins))
-            for ell in range(nbl):
-                for i in range(zbins):
-                    for j in range(zbins):
-                        for k in range(zbins):
-                            for l in range(zbins):
-                                cov_6D_arr[ell, ell, i, j, k, l] = \
-                                    ((cl_dict[A, C][ell, i, k] + noise_dict[A, C][i, k]) *
-                                     (cl_dict[B, D][ell, j, l] + noise_dict[B, D][j, l]) +
-                                     (cl_dict[A, D][ell, i, l] + noise_dict[A, D][i, l]) *
-                                     (cl_dict[B, C][ell, j, k] + noise_dict[B, C][j, k])) / \
-                                    ((2 * l_lin[ell] + 1) * fsky * delta_l[ell])
-            cov_10D_dict[A, B, C, D] = cov_6D_arr
-
-    return cov_10D_dict
-
 
 # XXX these 2 are not fit for 3x2pt!!
 # FIXME this function does not mix the A and B indices, is only fit for LL and GG
-@njit
+
 def covariance_6D(nbl, zbins, npairs, Cij, noise, l_lin, delta_l, fsky, ind, probe):
     print('this function is deprecated, use covariance_6D_dictionary instead')
 
@@ -2165,7 +1659,7 @@ def cov_blocks_GL_4D(D_ALL, N, nbl, zbins, l_lin_XC, delta_l_XC, fsky, ind, npai
     made for the probe ordering (LL, GL, GG)
     """
 
-    print('this function is deprecated, use covariance_6D_dictionary and cov_3x2pt_dict_10D_to_4D instead')
+    warnings.warn('this function is deprecated, use covariance_6D_dictionary and cov_3x2pt_dict_10D_to_4D instead')
 
     C_LL = D_ALL[:, 0, 0, :, :]
     C_GG = D_ALL[:, 1, 1, :, :]
@@ -2304,178 +1798,3 @@ def cov_blocks_LG_4D(D_ALL, N, nbl, zbins, l_lin_XC, delta_l_XC, fsky, ind, npai
     return cov_4D_LG
 
 
-@njit
-def cov_SSC_old(nbl, npairs, ind, Cij, Sijkl, fsky, probe, zbins, Rl):
-    """old version. What changed in the new version is just the i, j, k, l 
-    instead of the less readable ind[p, 2]... and so forth
-    """
-
-    assert probe in ['WL', 'WA', 'GC'], 'probe must be "WL", "WA" or "GC"'
-
-    if probe == "WL" or probe == "WA":
-        shift = 0
-    elif probe == "GC":
-        shift = zbins
-
-    cov_SSC = np.zeros((nbl, nbl, npairs, npairs))
-    for ell1 in range(nbl):
-        for ell2 in range(nbl):
-            for p in range(npairs):
-                for q in range(npairs):
-                    cov_SSC[ell1, ell2, p, q] = (Rl * Rl *
-                                                 Cij[ell1, ind[p, 2], ind[p, 3]] *
-                                                 Cij[ell2, ind[q, 2], ind[q, 3]] *
-                                                 Sijkl[ind[p, 2] + shift, ind[p, 3] + shift,
-                                                       ind[q, 2] + shift, ind[q, 3] + shift])
-    cov_SSC /= fsky
-    return cov_SSC
-
-
-@njit
-def cov_4D_to_2D_old(cov_4D, nbl, npairs):
-    """reshape from 4 to 2 dimensions, deprecated. Working but quite convoluted and difficult to read. Not efficient because of
-    the various if statements"""
-    cov_2D = np.zeros((npairs * nbl, npairs * nbl))
-    row = 0
-    col = 0
-    for ell1 in range(nbl):
-        for p in range(npairs):
-            col = 0
-            if ell1 == 0 and p == 0:
-                row = 0
-            else:
-                row = row + 1
-            for ell2 in range(nbl):
-                for q in range(npairs):
-                    cov_2D[row, col] = cov_4D[ell1, ell2, p, q]
-                    col = col + 1
-    return cov_2D
-
-
-@njit
-def cov_4D_to_2D_CLOE_old(cov_4D, nbl, p_max, q_max):
-    """same as above, but able to accept different zpairs values, producting non-square 2D blocks. Originally used to
-    build 3x2pt_2DCLOE covmat"""
-    cov_2D = np.zeros((p_max * nbl, q_max * nbl))
-    row = 0
-    col = 0
-    for ell1 in range(nbl):
-        for p in range(p_max):
-            col = 0
-            if ell1 == 0 and p == 0:
-                row = 0
-            else:
-                row = row + 1
-            for ell2 in range(nbl):
-                for q in range(q_max):
-                    cov_2D[row, col] = cov_4D[ell1, ell2, p, q]
-                    col = col + 1
-    return cov_2D
-
-
-def cov_4D_to_2D_3x2pt_CLOE_old(cov_4D, nbl, zbins):
-    """Builds 3x2pt_2DCLOE using the old cov_4D_to_2D function, discarded.
-    """
-    npairs, npairs_asimm, npairs_tot = get_zpairs(zbins)
-
-    lim_1 = npairs
-    lim_2 = npairs_asimm + npairs
-    lim_3 = npairs_tot
-
-    cov_L_L = cov_4D_to_2D_CLOE_old(cov_4D[:, :, :lim_1, :lim_1], nbl, npairs, npairs)
-    cov_L_LG = cov_4D_to_2D_CLOE_old(cov_4D[:, :, :lim_1, lim_1:lim_2], nbl, npairs, npairs_asimm)
-    cov_L_G = cov_4D_to_2D_CLOE_old(cov_4D[:, :, :lim_1, lim_2:lim_3], nbl, npairs, npairs)
-
-    cov_LG_L = cov_4D_to_2D_CLOE_old(cov_4D[:, :, lim_1:lim_2, :lim_1], nbl, npairs_asimm, npairs)
-    cov_LG_LG = cov_4D_to_2D_CLOE_old(cov_4D[:, :, lim_1:lim_2, lim_1:lim_2], nbl, npairs_asimm, npairs_asimm)
-    cov_LG_G = cov_4D_to_2D_CLOE_old(cov_4D[:, :, lim_1:lim_2, lim_2:lim_3], nbl, npairs_asimm, npairs)
-
-    cov_G_L = cov_4D_to_2D_CLOE_old(cov_4D[:, :, lim_2:lim_3, :lim_1], nbl, npairs, npairs)
-    cov_G_LG = cov_4D_to_2D_CLOE_old(cov_4D[:, :, lim_2:lim_3, lim_1:lim_2], nbl, npairs, npairs_asimm)
-    cov_G_G = cov_4D_to_2D_CLOE_old(cov_4D[:, :, lim_2:lim_3, lim_2:lim_3], nbl, npairs, npairs)
-
-    # make long rows and stack together
-    row_1 = np.hstack((cov_L_L, cov_L_LG, cov_L_G))
-    row_2 = np.hstack((cov_LG_L, cov_LG_LG, cov_LG_G))
-    row_3 = np.hstack((cov_G_L, cov_G_LG, cov_G_G))
-
-    array_2D = np.vstack((row_1, row_2, row_3))
-
-    return array_2D
-
-
-@njit  # XXX this function is new - still to be thouroughly tested (I don't think it's true)
-def cov_2D_to_4D_old(cov_2D, nbl, npairs):
-    print('this function is deprecated, please use cov_2D_to_4D instead')
-    """reshape from 2 to 4 dimensions"""
-    # TODO maybe re-check the corresponding new function?
-    cov_4D = np.zeros((nbl, nbl, npairs, npairs))
-    row = 0
-    col = 0
-    for ell1 in range(nbl):
-        for p in range(npairs):
-            col = 0
-            if ell1 == 0 and p == 0:
-                row = 0
-            else:
-                row = row + 1
-            for ell2 in range(nbl):
-                for q in range(npairs):
-                    cov_4D[ell1, ell2, p, q] = cov_2D[row, col]
-                    col = col + 1
-    return cov_4D
-
-
-def uncertainties_FM_old(FM, nparams=10, fid=None):
-    """
-    returns relative *percentage!* error
-    """
-    if fid is None:
-        fid = (0.32, 0.05, 1, 1, 0.67, 0.96, 0.816, 0.55, 1, 1)
-    else:
-        fid = np.where(fid == 0, 1, fid)  # the fiducial for wa is 0, substitute with 1 to avoid division by zero
-        fid = np.where(fid == -1, 1, fid)  # the fiducial for wa is -1, substitute with 1 to avoid negative values
-
-    # fidmn = (0.32, 0.05, 1, 1, 0.67, 0.96, 0.816, 0.06, 0.55, 1) # with massive neutrinos
-    FM_inv = np.linalg.inv(FM)
-    sigma_FM = np.zeros(nparams)
-    for i in range(nparams):
-        sigma_FM[i] = np.sqrt(FM_inv[i, i]) / fid[i]
-    return sigma_FM * 100
-
-
-def conditional_uncert_FM_old(FM, nparams=10, fid=None):
-    """
-    returns relative *percentage!* error
-    """
-    if fid is None:
-        fid = (0.32, 0.05, 1, 1, 0.67, 0.96, 0.816, 0.55, 1, 1)
-    else:
-        fid = np.where(fid == 0, 1, fid)  # the fiducial for wa is 0, substitute with 1 to avoid division by zero
-        fid = np.where(fid == -1, 1, fid)  # the fiducial for wa is -1, substitute with 1 to avoid negative values
-
-    # fidmn = (0.32, 0.05, 1, 1, 0.67, 0.96, 0.816, 0.06, 0.55, 1) # with massive neutrinos
-    sigma_FM = np.sqrt(1 / np.diag(FM))[:nparams] / fid * 100
-    return sigma_FM
-
-
-def Cl_2D_to_3D_symmetric_old(nbl, zbins, Cl_2D):
-    Cl_3D = np.zeros((nbl, zbins, zbins))
-    for ell in range(nbl):
-        k = 0
-        for i in range(zbins):
-            for j in range(i, zbins):
-                Cl_3D[ell, i, j] = Cl_2D[ell, k]
-                k += 1
-    return Cl_3D
-
-
-@njit
-def datavector_4D_to_3D_old(D_4D, ind, nParams, nbl, npairs):
-    """deprecated in favor of FM_utils.dC_4D_to_3D"""
-    D_3D = np.zeros((nbl, npairs, nParams))
-    for alf in range(nParams):
-        for elle in range(nbl):
-            for p in range(npairs):
-                D_3D[elle, p, alf] = D_4D[elle, ind[p, 2], ind[p, 3], alf]
-    return D_3D
