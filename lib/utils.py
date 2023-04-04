@@ -34,14 +34,12 @@ def load_compressed_pickle(file):
     return data
 
 
-
 def symmetrize_Cl(Cl, nbl, zbins):
     for ell in range(nbl):
         for i in range(zbins):
             for j in range(zbins):
                 Cl[ell, j, i] = Cl[ell, i, j]
     return Cl
-
 
 
 def percent_diff(array_1, array_2, abs_value=False):
@@ -52,7 +50,6 @@ def percent_diff(array_1, array_2, abs_value=False):
         return diff
 
 
-
 def percent_diff_mean(array_1, array_2):
     """
     result is in "percent" units
@@ -60,7 +57,6 @@ def percent_diff_mean(array_1, array_2):
     mean = (array_1 + array_2) / 2.0
     diff = (array_1 / mean - 1) * 100
     return diff
-
 
 
 def percent_diff_nan(array_1, array_2, eraseNaN=True, log=False, abs_val=False):
@@ -159,8 +155,6 @@ def compare_arrays(A, B, name_A='A', name_B='B', plot_diff=False, plot_array=Fal
                       f'\nNumber of elements with discrepancy > {higher_rtol}%: {no_outliers}' \
                       f'\nFraction of elements with discrepancy > {higher_rtol}%: {no_outliers / diff_AB.size:.5f}'
     print(f'Are A and B different by less than {higher_rtol}%? {result_emoji} {additional_info}')
-
-
 
 
 def generate_ind(triu_tril_square, row_col_major, size):
@@ -298,7 +292,6 @@ def Cl_3D_to_2D_asymmetric(Cl_3D):
     return Cl_2D
 
 
-
 def cl_1D_to_3D(cl_1d, nbl: int, zbins: int, is_symmetric: bool):
     """ This is used to unpack Vincenzo's files for SPV3
     Still to be thoroughly checked."""
@@ -411,7 +404,6 @@ def interpolator(dC_interpolated_dict, dC_dict, obs_name, params_names, nbl, zpa
             dC_interpolated_dict[f"dCij{obs_name}d{param_name}-{suffix}"] = dC_interpolated  # store array in the dict
 
     return dC_interpolated_dict
-
 
 
 def get_ind_file(path, ind_ordering, which_forecast):
@@ -609,7 +601,6 @@ def covariance_ALL(nbl, npairs, Cij, noise, l_lin, delta_l, fsky, ind):
     return cov_GO
 
 
-
 def cov_SSC_old(nbl, npairs, ind, Cij, Sijkl, fsky, probe, zbins, Rl):
     if probe in ["WL", "WA"]:
         shift = 0
@@ -633,7 +624,6 @@ def cov_SSC_old(nbl, npairs, ind, Cij, Sijkl, fsky, probe, zbins, Rl):
     return cov_SSC
 
 
-
 def cov_SSC(nbl, zpairs, ind, Cij, Sijkl, fsky, probe, zbins, Rl):
     if probe in ["WL", "WA"]:
         shift = 0
@@ -654,7 +644,6 @@ def cov_SSC(nbl, zpairs, ind, Cij, Sijkl, fsky, probe, zbins, Rl):
                                                  Sijkl[i + shift, j + shift, k + shift, l + shift])
     cov_SSC /= fsky
     return cov_SSC
-
 
 
 def build_Sijkl_dict(Sijkl, zbins):
@@ -683,7 +672,6 @@ def build_Sijkl_dict(Sijkl, zbins):
                         probe_lookup[probe_D]['start']:probe_lookup[probe_D]['stop']]
 
     return Sijkl_dict
-
 
 
 def build_3x2pt_dict(array_3x2pt):
@@ -749,7 +737,6 @@ def cov_SS_3x2pt_10D_dict_old(nbl, cl_3x2pt, Sijkl, fsky, zbins, response_3x2pt,
             cov_3x2pt_SS_10D[A, B, C, D][...] /= fsky
 
     return cov_3x2pt_SS_10D
-
 
 
 def cov_SSC_ALL(nbl, npairs_tot, ind, D_3x2pt, Sijkl, fsky, zbins, Rl):
@@ -892,7 +879,6 @@ def cov_GO_6D_blocks(C_AC, C_BD, C_AD, C_BC, N_AC, N_BD, N_AD, N_BC, nbl, zbins,
                              (C_BC[ell, j, k] + N_BC[j, k])) / \
                             ((2 * l_lin[ell] + 1) * fsky * delta_l[ell])
     return cov_GO_6D
-
 
 
 def cov_SS_6D_blocks(Rl_AB, Cl_AB, Rl_CD, Cl_CD, Sijkl_ABCD, nbl, zbins, fsky):
@@ -1054,7 +1040,6 @@ def cov_6D_to_4D(cov_6D, nbl, zpairs, ind):
     return cov_4D
 
 
-
 def cov_6D_to_4D_blocks(cov_6D, nbl, npairs_AB, npairs_CD, ind_AB, ind_CD):
     """ reshapes the covariance even for the non-diagonal (hence, non-square) blocks needed to build the 3x2pt.
     use npairs_AB = npairs_CD and ind_AB = ind_CD for the normal routine (valid for auto-covariance 
@@ -1102,7 +1087,6 @@ def check_symmetric(array_2d, exact, rtol=1e-05):
         return np.array_equal(array_2d, array_2d.T)
     else:
         return np.allclose(array_2d, array_2d.T, rtol=rtol, atol=0)
-
 
 
 # reshape from 3 to 4 dimensions
@@ -1159,7 +1143,6 @@ def cov_2D_to_4D(cov_2D, nbl, block_index='vincenzo'):
     return cov_4D
 
 
-
 def cov_4D_to_2D(cov_4D, block_index='vincenzo'):
     """ new (more elegant) version of cov_4D_to_2D. Also works for 3x2pt. The order
     of the for loops does not affect the result!
@@ -1209,7 +1192,6 @@ def cov_4D_to_2D(cov_4D, block_index='vincenzo'):
                         # block_index * block_size + running_index
                         cov_2D[ipair * nbl + l1, jpair * nbl + l2] = cov_4D[l1, l2, ipair, jpair]
     return cov_2D
-
 
 
 def cov_4D_to_2D_v0(cov_4D, nbl, zpairs_AB, zpairs_CD=None, block_index='vincenzo'):
@@ -1550,7 +1532,6 @@ def cov_4D_to_2D_sylvains_ord(cov_4D, nbl, npairs):
     return cov_2D
 
 
-
 def cov_2D_to_4D_sylvains_ord(cov_2D, nbl, npairs):
     """Reshape from 4D to 2D using Sylvain's ordering"""
     cov_4D = np.zeros((nbl, nbl, npairs, npairs))
@@ -1562,31 +1543,41 @@ def cov_2D_to_4D_sylvains_ord(cov_2D, nbl, npairs):
     return cov_4D
 
 
-def Cl_3D_to_1D(Cl_3D, nbl, npairs, ind, block_index='ij'):
+def Cl_3D_to_1D(cl_3D, ind, is_auto_spectrum, block_index):
     """This flattens the Cl_3D to 1D. Two ordeting conventions are used:
     - whether to use ij or ell as the outermost index (determined by the ordering of the for loops).
       This is going to be the index of the blocks in the 2D covariance matrix.
     - which ind file to use
     Sylvain uses block_index == 'pair_wise', me and Vincenzo block_index == 'ell_wise':
     I add this distinction in the "if" to make it clearer.
+    :param is_auto_spectrum:
     """
 
-    Cl_1D = np.zeros((nbl * npairs))
+    assert cl_3D.shape[1] == cl_3D.shape[2], 'cl_3D should be an array of shape (nbl, zbins, zbins)'
 
-    k = 0
-    if block_index == 'ij' or block_index == 'sylvain':
-        for ij in range(npairs):  # ATTENTION TO THE LOOP ORDERING!!
-            for ell in range(nbl):
-                Cl_1D[k] = Cl_3D[ell, ind[ij, 0], ind[ij, 1]]
-                k += 1
+    nbl = cl_3D.shape[0]
+    zbins = cl_3D.shape[1]
 
-    elif block_index == 'ell' or block_index == 'vincenzo':
-        for ell in range(nbl):
-            for ij in range(npairs):  # ATTENTION TO THE LOOP ORDERING!!
-                Cl_1D[k] = Cl_3D[ell, ind[ij, 0], ind[ij, 1]]
-                k += 1
+    zpairs_auto, zpairs_cross, zpairs_3x2pt = get_zpairs(zbins)
 
-    return Cl_1D
+    if is_auto_spectrum:
+        zpairs = zpairs_auto
+    # 1. reshape to 2D
+    if is_auto_spectrum:
+        cl_2D = Cl_3D_to_2D_symmetric(cl_3D, nbl, zpairs_auto, zbins)
+    elif not is_auto_spectrum:
+        cl_2D = Cl_3D_to_2D_asymmetric(cl_3D)
+    else:
+        raise ValueError('is_auto_spectrum must be either True or False')
+
+    if block_index == 'ell' or block_index == 'vincenzo':
+        cl_1D = cl_2D.flatten(order='C')
+    elif block_index == 'ij' or block_index == 'sylvain':
+        cl_1D = cl_2D.flatten(order='F')
+    else:
+        raise ValueError('block_index must be either "ij" or "ell"')
+
+    return cl_1D
 
 
 ########################### OLD FUNCTIONS ##############################################################################
@@ -1616,7 +1607,6 @@ def cov_SSC_ALL_old_improved(nbl, npairs_tot, ind, D_3x2pt, Sijkl, fsky, zbins, 
 
     cov_ALL_SSC /= fsky
     return cov_ALL_SSC
-
 
 
 # XXX these 2 are not fit for 3x2pt!!
@@ -1796,5 +1786,3 @@ def cov_blocks_LG_4D(D_ALL, N, nbl, zbins, l_lin_XC, delta_l_XC, fsky, ind, npai
     row_3 = np.concatenate((cov_GG_LL_4D, cov_GG_LG_4D, cov_GG_GG_4D), axis=3)
     cov_4D_LG = np.concatenate((row_1, row_2, row_3), axis=2)
     return cov_4D_LG
-
-
