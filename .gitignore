@@ -2,6 +2,7 @@ output/
 
 # binary files 
 *.npy
+*.npz
 
 *.fits
 *.pyc
