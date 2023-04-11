@@ -1543,7 +1543,7 @@ def cov_2D_to_4D_sylvains_ord(cov_2D, nbl, npairs):
     return cov_4D
 
 
-def Cl_3D_to_1D(cl_3D, ind, is_auto_spectrum, block_index):
+def cl_3D_to_1D(cl_3D, ind, use_triu_row_major, is_auto_spectrum, block_index):
     """This flattens the Cl_3D to 1D. Two ordeting conventions are used:
     - whether to use ij or ell as the outermost index (determined by the ordering of the for loops).
       This is going to be the index of the blocks in the 2D covariance matrix.
@@ -1562,13 +1562,59 @@ def Cl_3D_to_1D(cl_3D, ind, is_auto_spectrum, block_index):
 
     if is_auto_spectrum:
         zpairs = zpairs_auto
-    # 1. reshape to 2D
+
+    # # 1. reshape to 2D
     if is_auto_spectrum:
         cl_2D = Cl_3D_to_2D_symmetric(cl_3D, nbl, zpairs_auto, zbins)
     elif not is_auto_spectrum:
         cl_2D = Cl_3D_to_2D_asymmetric(cl_3D)
     else:
         raise ValueError('is_auto_spectrum must be either True or False')
+
+    # cl_2D = cl_3D_to_2D(cl_3D, ind, is_auto_spectrum, use_triu_row_major=use_triu_row_major)
+
+    if block_index == 'ell' or block_index == 'vincenzo':
+        cl_1D = cl_2D.flatten(order='C')
+    elif block_index == 'ij' or block_index == 'sylvain':
+        cl_1D = cl_2D.flatten(order='F')
+    else:
+        raise ValueError('block_index must be either "ij" or "ell"')
+
+    return cl_1D
+
+
+def cl_3D_to_2D_or_1D(cl_3D, ind, is_auto_spectrum, use_triu_row_major, convert_to_2D, block_index):
+    """ reshape from (nbl, zbins, zbins) to (nbl, zpairs), according to the ordering given in the ind file
+    (valid for asymmetric Cij, i.e. C_XC)
+    """
+    assert cl_3D.ndim == 3, 'cl_3D must be a 3D array'
+    assert cl_3D.shape[1] == cl_3D.shape[2], 'cl_3D must be a square array of shape (nbl, zbins, zbins)'
+
+    nbl = cl_3D.shape[0]
+    zbins = cl_3D.shape[1]
+    zpairs_auto, zpairs_cross, zpairs_3x2pt = get_zpairs(zbins)
+
+    if use_triu_row_major:
+        ind = build_full_ind('triu', 'row-major', zbins)
+
+    if is_auto_spectrum:
+        ind = ind[:zpairs_auto, :]
+        zpairs = zpairs_auto
+    elif not is_auto_spectrum:
+        ind = ind[zpairs_auto:zpairs_cross, :]
+        zpairs = zpairs_cross
+    else:
+        raise ValueError('is_auto_spectrum must be either True or False')
+
+    cl_2D = np.zeros((nbl, zpairs))
+    for ell in range(nbl):
+        zpair = 0
+        for zi, zj in ind[:, 2:]:
+            cl_2D[ell, zpair] = cl_3D[ell, zi, zj]
+            zpair += 1
+
+    if convert_to_2D:
+        return cl_2D
 
     if block_index == 'ell' or block_index == 'vincenzo':
         cl_1D = cl_2D.flatten(order='C')
