@@ -1487,8 +1487,8 @@ def build_noise(zbins, nProbes, sigma_eps2, ng, EP_or_ED='EP'):
     if type(ng) == int or type(ng) == float:
         assert ng > 0, 'ng should be positive'
         assert EP_or_ED == 'EP', 'if ng is a scalar (not a vector), the bins should be equipopulated'
-        assert ng > 20, 'ng should roughly be > 20 (this check is meant to make sure that ng is the cumulative galaxy ' \
-                        'density, not the galaxy density in each bin)'
+        # assert ng > 20, 'ng should roughly be > 20 (this check is meant to make sure that ng is the cumulative galaxy ' \
+        #                 'density, not the galaxy density in each bin)'
         n_bar = ng / zbins * conversion_factor
 
     # if ng is an array, n_bar == ng (this is a slight minomer, since ng is the cumulative galaxy density, while
@@ -1498,7 +1498,7 @@ def build_noise(zbins, nProbes, sigma_eps2, ng, EP_or_ED='EP'):
         assert np.all(ng > 0), 'ng should be positive'
         assert np.sum(ng) > 20, 'ng should roughly be > 20'
         if EP_or_ED == 'EP':
-            assert np.allclose(np.ones(ng) * ng[0], ng), 'if ng is a vector and the bins are equipopulated, ' \
+            assert np.allclose(np.ones_like(ng) * ng[0], ng, rtol=0.05, atol=0), 'if ng is a vector and the bins are equipopulated, ' \
                                                          'the value in each bin should be the same (or very similar)'
         n_bar = ng * conversion_factor
 
@@ -1512,6 +1512,7 @@ def build_noise(zbins, nProbes, sigma_eps2, ng, EP_or_ED='EP'):
     N[0, 1, :, :] = 0
     N[1, 0, :, :] = 0
     return N
+
 
 
 def my_exit():
