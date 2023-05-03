@@ -1498,8 +1498,9 @@ def build_noise(zbins, nProbes, sigma_eps2, ng, EP_or_ED='EP'):
         assert np.all(ng > 0), 'ng should be positive'
         assert np.sum(ng) > 20, 'ng should roughly be > 20'
         if EP_or_ED == 'EP':
-            assert np.allclose(np.ones_like(ng) * ng[0], ng, rtol=0.05, atol=0), 'if ng is a vector and the bins are equipopulated, ' \
-                                                         'the value in each bin should be the same (or very similar)'
+            assert np.allclose(np.ones_like(ng) * ng[0], ng, rtol=0.05,
+                               atol=0), 'if ng is a vector and the bins are equipopulated, ' \
+                                        'the value in each bin should be the same (or very similar)'
         n_bar = ng * conversion_factor
 
     else:
@@ -1512,7 +1513,6 @@ def build_noise(zbins, nProbes, sigma_eps2, ng, EP_or_ED='EP'):
     N[0, 1, :, :] = 0
     N[1, 0, :, :] = 0
     return N
-
 
 
 def my_exit():
@@ -1627,209 +1627,134 @@ def cl_3D_to_2D_or_1D(cl_3D, ind, is_auto_spectrum, use_triu_row_major, convert_
     return cl_1D
 
 
-########################### OLD FUNCTIONS ##############################################################################
-########################################################################################################################
-
-
-def cov_SSC_ALL_old_improved(nbl, npairs_tot, ind, D_3x2pt, Sijkl, fsky, zbins, Rl):
-    """The fastest routine to compute the SSC covariance matrix.
-    Implements the new shift, which is much better (no ifs!!!)
-    Superseeded by passing Rl as an array (fill with the same values, in case of a constant probe response)
+def build_X_matrix_BNT(BNT_matrix):
     """
-
-    cov_ALL_SSC = np.zeros((nbl, nbl, npairs_tot, npairs_tot))
-    for ell1 in range(nbl):
-        for ell2 in range(nbl):
-            for p in range(npairs_tot):
-                for q in range(npairs_tot):
-                    i, j, k, l = ind[p, 2], ind[p, 3], ind[q, 2], ind[q, 3]
-                    A, B, C, D = ind[p, 0], ind[p, 1], ind[q, 0], ind[q, 1]
-
-                    # the shift is implemented by multiplying A, B, C, D by zbins: if lensing, probe == 0 and shift = 0
-                    # if probe is GC, probe == 1 and shift = zbins. this does not hold if you switch probe indices!
-                    cov_ALL_SSC[ell1, ell2, p, q] = (Rl * Rl *
-                                                     D_3x2pt[ell1, A, B, i, j] *
-                                                     D_3x2pt[ell2, C, D, k, l] *
-                                                     Sijkl[i + A * zbins, j + B * zbins, k + C * zbins, l + D * zbins])
-
-    cov_ALL_SSC /= fsky
-    return cov_ALL_SSC
-
-
-# XXX these 2 are not fit for 3x2pt!!
-# FIXME this function does not mix the A and B indices, is only fit for LL and GG
-
-def covariance_6D(nbl, zbins, npairs, Cij, noise, l_lin, delta_l, fsky, ind, probe):
-    print('this function is deprecated, use covariance_6D_dictionary instead')
-
-    # some checks
-    assert probe == "LL" or probe == "GG", 'probe must be LL or GG, this function cannot compute 3x2pt at the moment'
-    if probe == "LL":
-        probe_A = 0;
-        probe_B = 0
-    elif probe == "GG":
-        probe_A = 1;
-        probe_B = 1
-
-    # create covariance array
-    cov_6D = np.zeros((nbl, nbl, zbins, zbins, zbins, zbins))
-    for ell in range(nbl):
-        for i in range(zbins):
-            for j in range(zbins):
-                for k in range(zbins):
-                    for l in range(zbins):
-                        cov_6D[ell, ell, i, j, k, l] = \
-                            ((Cij[ell, i, k] + noise[probe_A, probe_B, i, k]) *
-                             (Cij[ell, j, l] + noise[probe_A, probe_B, j, l]) +
-                             (Cij[ell, i, l] + noise[probe_A, probe_B, i, l]) *
-                             (Cij[ell, j, k] + noise[probe_A, probe_B, j, k])) / \
-                            ((2 * l_lin[ell] + 1) * fsky * delta_l[ell])
-
-    return cov_6D
-
-
-# the following 2 are deprecated in favour of and cov_3x2pt_dict_10D_to_4D
-def cov_blocks_GL_4D(D_ALL, N, nbl, zbins, l_lin_XC, delta_l_XC, fsky, ind, npairs, npairs_asimm):
+    Builds the X matrix for the BNT transform, according to eq.
+    :param BNT_matrix:
+    :return:
     """
-    computes the 3x2pt covariance in 6 blocks of 6D, then reshapes each block 
-    individually to 4D and stacks everything into cov_3x2pt_4D. This one is specifically 
-    made for the probe ordering (LL, GL, GG)
+    X = {}
+    delta_kron = np.eye(BNT_matrix.shape[0])
+    X['L', 'L'] = np.einsum('ae, bf -> aebf', BNT_matrix, BNT_matrix)
+    X['G', 'G'] = np.einsum('ae, bf -> aebf', delta_kron, delta_kron)
+    X['G', 'L'] = np.einsum('ae, bf -> aebf', delta_kron, BNT_matrix)
+    X['L', 'G'] = np.einsum('ae, bf -> aebf', BNT_matrix, delta_kron)
+    return X
+
+
+def cov_BNT_transform(cov_noBNT_6D, X_dict, probe_A, probe_B, probe_C, probe_D, optimize=True):
+    """same as above, but only for one probe (i.e., LL or GL: GG is not modified by the BNT)"""
+    # todo it's nicer if you sandwitch the covariance, maybe? That is, X cov X instead of X X cov
+    cov_BNT_6D = np.einsum('aebf, cgdh, LMefgh -> LMabcd', X_dict[probe_A, probe_B], X_dict[probe_C, probe_D],
+                           cov_noBNT_6D, optimize=optimize)
+    return cov_BNT_6D
+
+
+def cov_3x2pt_BNT_transform(cov_3x2pt_10D_dict, X_dict, optimize=True):
+    """in np.einsum below, L and M are the ell1, ell2 indices, which are not touched by the BNT transform"""
+
+    cov_3x2pt_BNT_dict_10D = {}
+
+    for probe_A, probe_B, probe_C, probe_D in cov_3x2pt_10D_dict.keys():
+        cov_3x2pt_BNT_dict_10D[probe_A, probe_B, probe_C, probe_D] = \
+            cov_BNT_transform(cov_3x2pt_10D_dict[probe_A, probe_B, probe_C, probe_D], X_dict,
+                              probe_A, probe_B, probe_C, probe_D, optimize=optimize)
+
+    return cov_3x2pt_BNT_dict_10D
+
+
+def cl_BNT_transform(cl_3D, BNT_matrix, probe_A, probe_B):
+    assert cl_3D.ndim == 3, 'cl_3D must be 3D'
+    assert BNT_matrix.ndim == 2, 'BNT_matrix must be 2D'
+    assert cl_3D.shape[1] == BNT_matrix.shape[0], 'the number of ell bins in cl_3D and BNT_matrix must be the same'
+
+    BNT_transform_dict = {
+        'L': BNT_matrix,
+        'G': np.eye(BNT_matrix.shape[0]),
+    }
+
+    cl_3D_BNT = np.zeros(cl_3D.shape)
+    for ell_idx in range(cl_3D.shape[0]):
+        cl_3D_BNT[ell_idx, :, :] = BNT_transform_dict[probe_A] @ \
+                                   cl_3D[ell_idx, :, :] @ \
+                                   BNT_transform_dict[probe_B].T
+
+    return cl_3D_BNT
+
+
+def cl_BNT_transform_3x2pt(cl_3x2pt_5D, BNT_matrix):
+    """wrapper function to quickly implement the cl (or derivatives) BNT transform for the 3x2pt datavector"""
+
+    cl_3x2pt_5D_BNT = np.zeros(cl_3x2pt_5D.shape)
+    cl_3x2pt_5D_BNT[0, 0, :, :, :] = cl_BNT_transform(cl_3x2pt_5D[0, 0, :, :, :], BNT_matrix, 'L', 'L')
+    cl_3x2pt_5D_BNT[0, 1, :, :, :] = cl_BNT_transform(cl_3x2pt_5D[0, 1, :, :, :], BNT_matrix, 'L', 'G')
+    cl_3x2pt_5D_BNT[1, 0, :, :, :] = cl_BNT_transform(cl_3x2pt_5D[1, 0, :, :, :], BNT_matrix, 'G', 'L')
+    cl_3x2pt_5D_BNT[1, 1, :, :, :] = cl_3x2pt_5D[1, 1, :, :, :]  # no need to transform the GG part
+
+    return cl_3x2pt_5D_BNT
+
+
+def cl_1d_to_3x2pt_5d(cl_LL_1d, cl_GL_1d, cl_GG_1d, nbl, zbins):
+    zpairs_auto, zpairs_cross, _ = utils.get_zpairs(zbins)
+
+    # reshape to 2D
+    cl_LL_2d = cl_LL_1d.reshape((nbl, zpairs_auto))
+    cl_GL_2d = cl_GL_1d.reshape((nbl, zpairs_cross))
+    cl_GG_2d = cl_GG_1d.reshape((nbl, zpairs_auto))
+
+    # reshape to 3d
+    cl_LL_3d = utils.cl_2D_to_3D_symmetric(cl_LL_2d, nbl, zpairs_auto, zbins)
+    cl_GL_3d = utils.cl_2D_to_3D_asymmetric(cl_GL_2d, nbl, zbins, 'C')
+    cl_GG_3d = utils.cl_2D_to_3D_symmetric(cl_GG_2d, nbl, zpairs_auto, zbins)
+
+    # construct 3x2pt 5d vector
+    cl_3x2pt_5d = np.zeros((2, 2, nbl, zbins, zbins))
+    cl_3x2pt_5d[0, 0, ...] = cl_LL_3d
+    cl_3x2pt_5d[1, 0, ...] = cl_GL_3d
+    cl_3x2pt_5d[0, 1, ...] = cl_GL_3d.transpose(0, 2, 1)
+    cl_3x2pt_5d[1, 1, ...] = cl_GG_3d
+
+    return cl_3x2pt_5d
+
+
+def compute_ells(nbl: int, ell_min: int, ell_max: int, recipe, output_ell_bin_edges: bool = False):
+    """Compute the ell values and the bin widths for a given recipe.
+
+    Parameters
+    ----------
+    nbl : int
+        Number of ell bins.
+    ell_min : int
+        Minimum ell value.
+    ell_max : int
+        Maximum ell value.
+    recipe : str
+        Recipe to use. Must be either "ISTF" or "ISTNL".
+    output_ell_bin_edges : bool, optional
+        If True, also return the ell bin edges, by default False
+
+    Returns
+    -------
+    ells : np.ndarray
+        Central ell values.
+    deltas : np.ndarray
+        Bin widths
+    ell_bin_edges : np.ndarray, optional
+        ell bin edges. Returned only if output_ell_bin_edges is True.
     """
+    if recipe == 'ISTF':
+        ell_bin_edges = np.logspace(np.log10(ell_min), np.log10(ell_max), nbl + 1)
+        ells = (ell_bin_edges[1:] + ell_bin_edges[:-1]) / 2
+        deltas = np.diff(ell_bin_edges)
+    elif recipe == 'ISTNL':
+        ell_bin_edges = np.linspace(np.log(ell_min), np.log(ell_max), nbl + 1)
+        ells = (ell_bin_edges[:-1] + ell_bin_edges[1:]) / 2.
+        ells = np.exp(ells)
+        deltas = np.diff(np.exp(ell_bin_edges))
+    else:
+        raise ValueError('recipe must be either "ISTF" or "ISTNL"')
 
-    warnings.warn('this function is deprecated, use covariance_6D_dictionary and cov_3x2pt_dict_10D_to_4D instead')
+    if output_ell_bin_edges:
+        return ells, deltas, ell_bin_edges
 
-    C_LL = D_ALL[:, 0, 0, :, :]
-    C_GG = D_ALL[:, 1, 1, :, :]
-    C_LG = D_ALL[:, 0, 1, :, :]  # I'm renaming, should be correct, XXX BUG ALERT
-    C_GL = D_ALL[:, 1, 0, :, :]
-
-    # noise
-    N_LL = N[0, 0, :, :]
-    N_GG = N[1, 1, :, :]
-    N_LG = N[0, 1, :, :]
-    N_GL = N[1, 0, :, :]
-
-    print('attention: there may be an issue with the ind array: \n ind[55:155, :] may actually be ind_LG, not ind_GL')
-    print('THIS FUNCTION HAS TO BE FINISHED')
-
-    ind_LL = ind[:55, :]
-    ind_GG = ind[:55, :]
-    ind_GL = ind[55:155, :]  # ind_GL????? XXX BUG ALERT
-    ind_LG = np.copy(ind_GL)
-    ind_LG[:, [2, 3]] = ind_LG[:, [3, 2]]
-
-    cov_LL_LL_6D = cov_GO_6D_blocks(C_LL, C_LL, C_LL, C_LL, N_LL, N_LL, N_LL, N_LL, nbl, zbins, l_lin_XC,
-                                    delta_l_XC, fsky)
-    cov_LL_GL_6D = cov_GO_6D_blocks(C_LG, C_LL, C_LL, C_LG, N_LG, N_LL, N_LL, N_LG, nbl, zbins, l_lin_XC,
-                                    delta_l_XC, fsky)
-    cov_LL_GG_6D = cov_GO_6D_blocks(C_LG, C_LG, C_LG, C_LG, N_LG, N_LG, N_LG, N_LG, nbl, zbins, l_lin_XC,
-                                    delta_l_XC, fsky)
-
-    cov_GL_LL_6D = cov_GO_6D_blocks(C_GL, C_LL, C_GL, C_LL, N_GL, N_LL, N_GL, N_LL, nbl, zbins, l_lin_XC,
-                                    delta_l_XC, fsky)
-    cov_GL_GL_6D = cov_GO_6D_blocks(C_GG, C_LL, C_GL, C_LG, N_GG, N_LL, N_GL, N_LG, nbl, zbins, l_lin_XC,
-                                    delta_l_XC, fsky)
-    cov_GL_GG_6D = cov_GO_6D_blocks(C_GG, C_LG, C_GG, C_LG, N_GG, N_LG, N_GG, N_LG, nbl, zbins, l_lin_XC,
-                                    delta_l_XC, fsky)
-
-    cov_GG_LL_6D = cov_GO_6D_blocks(C_GL, C_GL, C_GL, C_GL, N_GL, N_GL, N_GL, N_GL, nbl, zbins, l_lin_XC,
-                                    delta_l_XC, fsky)
-    cov_GG_GL_6D = cov_GO_6D_blocks(C_GG, C_GL, C_GL, C_GG, N_GG, N_GL, N_GL, N_GG, nbl, zbins, l_lin_XC,
-                                    delta_l_XC, fsky)
-    cov_GG_GG_6D = cov_GO_6D_blocks(C_GG, C_GG, C_GG, C_GG, N_GG, N_GG, N_GG, N_GG, nbl, zbins, l_lin_XC,
-                                    delta_l_XC, fsky)
-
-    # 6D to 3D:
-    cov_LL_LL_4D = cov_6D_to_4D_blocks(cov_LL_LL_6D, nbl, npairs, npairs, ind_LL, ind_LL)
-    cov_LL_GL_4D = cov_6D_to_4D_blocks(cov_LL_GL_6D, nbl, npairs, npairs_asimm, ind_LL, ind_GL)  # ! it's ind_GL!
-    cov_LL_GG_4D = cov_6D_to_4D_blocks(cov_LL_GG_6D, nbl, npairs, npairs, ind_LL, ind_GG)
-
-    cov_GL_LL_4D = cov_6D_to_4D_blocks(cov_GL_LL_6D, nbl, npairs_asimm, npairs, ind_GL, ind_LL)
-    cov_GL_GL_4D = cov_6D_to_4D_blocks(cov_GL_GL_6D, nbl, npairs_asimm, npairs_asimm, ind_GL, ind_GL)  # ! it's ind_GL!
-    cov_GL_GG_4D = cov_6D_to_4D_blocks(cov_GL_GG_6D, nbl, npairs_asimm, npairs, ind_GL, ind_GG)
-
-    cov_GG_LL_4D = cov_6D_to_4D_blocks(cov_GG_LL_6D, nbl, npairs, npairs, ind_GG, ind_LL)
-    cov_GG_GL_4D = cov_6D_to_4D_blocks(cov_GG_GL_6D, nbl, npairs, npairs_asimm, ind_GG, ind_GL)  # ! it's ind_GL!
-    cov_GG_GG_4D = cov_6D_to_4D_blocks(cov_GG_GG_6D, nbl, npairs, npairs, ind_GG, ind_GG)
-
-    # put the matrix together
-    row_1 = np.concatenate((cov_LL_LL_4D, cov_LL_GL_4D, cov_LL_GG_4D), axis=3)
-    row_2 = np.concatenate((cov_GL_LL_4D, cov_GL_GL_4D, cov_GL_GG_4D), axis=3)
-    row_3 = np.concatenate((cov_GG_LL_4D, cov_GG_GL_4D, cov_GG_GG_4D), axis=3)
-    cov_4D_GL = np.concatenate((row_1, row_2, row_3), axis=2)
-
-    return cov_4D_GL
-
-
-def cov_blocks_LG_4D(D_ALL, N, nbl, zbins, l_lin_XC, delta_l_XC, fsky, ind, npairs, npairs_asimm):
-    """
-    computes the 3x2pt covariance in 6 blocks of 6D, then reshapes each block 
-    individually to 4D and stacks everything into cov_3x2pt_4D. This one is specifically 
-    made for the probe ordering (LL, LG, GG)
-    """
-
-    print('this function is deprecated, use covariance_6D_dictionary and cov_3x2pt_dict_10D_to_4D instead')
-
-    C_LL = D_ALL[:, 0, 0, :, :]
-    C_GG = D_ALL[:, 1, 1, :, :]
-    C_LG = D_ALL[:, 0, 1, :, :]  # I'm renaming, should be correct, XXX BUG ALERT
-    C_GL = D_ALL[:, 1, 0, :, :]
-
-    # noise
-    N_LL = N[0, 0, :, :]
-    N_GG = N[1, 1, :, :]
-    N_LG = N[0, 1, :, :]
-    N_GL = N[1, 0, :, :]
-
-    print('attention: there may be an issue with the ind array: \n ind[55:155, :] may actually be ind_LG, not ind_GL')
-    print('THIS FUNCTION HAS TO BE FINISHED')
-    ind_LL = ind[:55, :]
-    ind_GG = ind[:55, :]
-    ind_GL = ind[55:155, :]  # ind_GL????? XXX BUG ALERT
-    ind_LG = np.copy(ind_GL)
-    ind_LG[:, [2, 3]] = ind_LG[:, [3, 2]]
-
-    # def cov_blocks_LG_6D(D_ALL, N, nbl, zbins, l_lin, delta_l, fsky):
-    cov_LL_LL_6D = cov_GO_6D_blocks(C_LL, C_LL, C_LL, C_LL, N_LL, N_LL, N_LL, N_LL, nbl, zbins, l_lin_XC,
-                                    delta_l_XC, fsky)
-    cov_LL_LG_6D = cov_GO_6D_blocks(C_LL, C_LG, C_LG, C_LL, N_LL, N_LG, N_LG, N_LL, nbl, zbins, l_lin_XC,
-                                    delta_l_XC, fsky)
-    cov_LL_GG_6D = cov_GO_6D_blocks(C_LG, C_LG, C_LG, C_LG, N_LG, N_LG, N_LG, N_LG, nbl, zbins, l_lin_XC,
-                                    delta_l_XC, fsky)
-
-    cov_LG_LL_6D = cov_GO_6D_blocks(C_LL, C_GL, C_LL, C_GL, N_LL, N_GL, N_LL, N_GL, nbl, zbins, l_lin_XC,
-                                    delta_l_XC, fsky)
-    cov_LG_LG_6D = cov_GO_6D_blocks(C_LL, C_GG, C_LG, C_GL, N_LL, N_GG, N_LG, N_GL, nbl, zbins, l_lin_XC,
-                                    delta_l_XC, fsky)
-    cov_LG_GG_6D = cov_GO_6D_blocks(C_LG, C_GG, C_LG, C_GG, N_LG, N_GG, N_LG, N_GG, nbl, zbins, l_lin_XC,
-                                    delta_l_XC, fsky)
-
-    cov_GG_LL_6D = cov_GO_6D_blocks(C_GL, C_GL, C_GL, C_GL, N_GL, N_GL, N_GL, N_GL, nbl, zbins, l_lin_XC,
-                                    delta_l_XC, fsky)
-    cov_GG_LG_6D = cov_GO_6D_blocks(C_GL, C_GG, C_GG, C_GL, N_GL, N_GG, N_GG, N_GL, nbl, zbins, l_lin_XC,
-                                    delta_l_XC, fsky)
-    cov_GG_GG_6D = cov_GO_6D_blocks(C_GG, C_GG, C_GG, C_GG, N_GG, N_GG, N_GG, N_GG, nbl, zbins, l_lin_XC,
-                                    delta_l_XC, fsky)
-
-    # 6D to 3D:
-    cov_LL_LL_4D = cov_6D_to_4D_blocks(cov_LL_LL_6D, nbl, npairs, npairs, ind_LL, ind_LL)
-    cov_LL_LG_4D = cov_6D_to_4D_blocks(cov_LL_LG_6D, nbl, npairs, npairs_asimm, ind_LL,
-                                       ind_GL)  # XXXXXXXXXXXX it's ind_GL!!!!!
-    cov_LL_GG_4D = cov_6D_to_4D_blocks(cov_LL_GG_6D, nbl, npairs, npairs, ind_LL, ind_GG)
-
-    cov_LG_LL_4D = cov_6D_to_4D_blocks(cov_LG_LL_6D, nbl, npairs_asimm, npairs, ind_GL, ind_LL)
-    cov_LG_LG_4D = cov_6D_to_4D_blocks(cov_LG_LG_6D, nbl, npairs_asimm, npairs_asimm, ind_GL,
-                                       ind_GL)  # XXXXXXXXXXXX it's ind_GL!!!!!
-    cov_LG_GG_4D = cov_6D_to_4D_blocks(cov_LG_GG_6D, nbl, npairs_asimm, npairs, ind_GL, ind_GG)
-
-    cov_GG_LL_4D = cov_6D_to_4D_blocks(cov_GG_LL_6D, nbl, npairs, npairs, ind_GG, ind_LL)
-    cov_GG_LG_4D = cov_6D_to_4D_blocks(cov_GG_LG_6D, nbl, npairs, npairs_asimm, ind_GG,
-                                       ind_GL)  # XXXXXXXXXXXX it's ind_GL!!!!!
-    cov_GG_GG_4D = cov_6D_to_4D_blocks(cov_GG_GG_6D, nbl, npairs, npairs, ind_GG, ind_GG)
-
-    # put the matrix together
-    row_1 = np.concatenate((cov_LL_LL_4D, cov_LL_LG_4D, cov_LL_GG_4D), axis=3)
-    row_2 = np.concatenate((cov_LG_LL_4D, cov_LG_LG_4D, cov_LG_GG_4D), axis=3)
-    row_3 = np.concatenate((cov_GG_LL_4D, cov_GG_LG_4D, cov_GG_GG_4D), axis=3)
-    cov_4D_LG = np.concatenate((row_1, row_2, row_3), axis=2)
-    return cov_4D_LG
+    return ells, deltas
