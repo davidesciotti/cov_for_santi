@@ -1143,7 +1143,7 @@ def cov_2D_to_4D(cov_2D, nbl, block_index='vincenzo'):
     return cov_4D
 
 
-def cov_4D_to_2D(cov_4D, block_index='vincenzo'):
+def cov_4D_to_2D(cov_4D, block_index='vincenzo', optimize=True):
     """ new (more elegant) version of cov_4D_to_2D. Also works for 3x2pt. The order
     of the for loops does not affect the result!
 
@@ -1176,6 +1176,13 @@ def cov_4D_to_2D(cov_4D, block_index='vincenzo'):
 
     cov_2D = np.zeros((nbl * zpairs_AB, nbl * zpairs_CD))
 
+    if optimize:
+        if block_index in ['ell', 'vincenzo', 'C-style']:
+            cov_2D.reshape(nbl, zpairs_AB, nbl, zpairs_CD)[:, :, :, :] = cov_4D.transpose(0, 2, 1, 3)
+
+        elif block_index in ['ij', 'sylvain', 'F-style']:
+            cov_2D.reshape(zpairs_AB, nbl, zpairs_CD, nbl)[:, :, :, :] = cov_4D.transpose(2, 0, 3, 1)
+
     if block_index in ['ell', 'vincenzo', 'C-style']:
         for l1 in range(nbl):
             for l2 in range(nbl):
@@ -1191,6 +1198,7 @@ def cov_4D_to_2D(cov_4D, block_index='vincenzo'):
                     for jpair in range(zpairs_CD):
                         # block_index * block_size + running_index
                         cov_2D[ipair * nbl + l1, jpair * nbl + l2] = cov_4D[l1, l2, ipair, jpair]
+
     return cov_2D
 
 

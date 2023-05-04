@@ -1,0 +1,17 @@
+survey_area: 14_700  # in deg^2
+
+zbins: 13
+ell_min: 10
+ell_max: 5000
+
+n_gal: np.genfromtxt('/Users/davide/Documents/Lavoro/Programmi/CLOE_validation/data/nuisance/nuiTabSPV3.dat')[:, 1]
+sigma_eps: 0.26 * np.sqrt(2)
+
+EP_or_ED: 'EP'  # equipopulated or equidistant
+GL_or_LG: 'GL'  # whether the cross-correlation is galaxy-galaxy lensing or galaxy lensing-galaxy
+triu_tril: 'triu'  # which elements aof the auto-spectra are kept
+row_col_major: 'row-major'  # whether the flattening of the spectra is in row-major or column-major order
+probe_ordering: [['L', 'L'], [GL_or_LG[0], GL_or_LG[1]], ['G', 'G']]
+block_index: 'ell'  # whether the block of the covariance are indexed by ell or z
+n_probes: 2  # number of probes in the 3x2pt datavector
+cl_input_folder: '../input/cl_LiFE/WeightedTest'
