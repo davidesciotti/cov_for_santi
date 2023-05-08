@@ -1182,6 +1182,7 @@ def cov_4D_to_2D(cov_4D, block_index='vincenzo', optimize=True):
 
         elif block_index in ['ij', 'sylvain', 'F-style']:
             cov_2D.reshape(zpairs_AB, nbl, zpairs_CD, nbl)[:, :, :, :] = cov_4D.transpose(2, 0, 3, 1)
+        return cov_2D
 
     if block_index in ['ell', 'vincenzo', 'C-style']:
         for l1 in range(nbl):
