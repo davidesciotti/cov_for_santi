@@ -114,7 +114,7 @@ cl_3x2pt_5D[0, 1, :, :, :] = cl_GL_3D.transpose(0, 2, 1)
 cl_3x2pt_5D[1, 0, :, :, :] = cl_GL_3D
 cl_3x2pt_5D[1, 1, :, :, :] = cl_GG_3D
 
-# create a noise with dummy axis for ell, to have the same shape as cl_3x2pt_5D
+# create a noise with dummy axis for ell, to have the same shape as cl_3x2pt_5d
 noise_3x2pt_4D = mm.build_noise(zbins, n_probes, sigma_eps2=sigma_eps ** 2, ng=n_gal, EP_or_ED=EP_or_ED)
 noise_3x2pt_5D = np.zeros((n_probes, n_probes, nbl, zbins, zbins))
 for probe_A in (0, 1):

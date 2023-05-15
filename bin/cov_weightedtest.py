@@ -18,6 +18,23 @@ import utils
 sys.path.append('/Users/davide/Documents/Lavoro/Programmi/common_data/common_lib')
 import my_module as mm
 
+
+def plot_differences_func():
+    if not plot_differences:
+        return
+
+    plt.figure()
+    plt.title(f'case W{weight_id:02d}, C{cosmology_id}, nbl{nbl}')
+    plt.plot(smape, label='SMAPE, uniform weights')
+    plt.plot(diff_sigma, label='abs(diff)/sigma_W00')
+    plt.plot(old_diff, label='old_diff')
+    # plt.plot(cl_3x2pt_1d_w00, label='SMAPE, uniform weights')
+    # plt.plot(cl_3x2pt_1d, label='abs(diff)/sigma_w00')
+    plt.ylabel('difference [%]')
+    plt.xlabel('datavector element')
+    plt.legend()
+
+
 # ! settings
 # import the yaml config file
 # with open('../config/config.yaml', 'r') as ymlfile:
@@ -110,18 +127,18 @@ for cosmology_id in range(13, 23):
             cl_gl_3x2pt_3d = mm.cl_2D_to_3D_asymmetric(cl_gl_3x2pt_2d, nbl=nbl, zbins=zbins, order='C')
             cl_gg_3x2pt_3d = mm.cl_2D_to_3D_symmetric(cl_gg_3x2pt_2d, nbl=nbl, zpairs=zpairs_auto, zbins=zbins)
 
-            cl_3x2pt_5D_w00 = np.zeros((n_probes, n_probes, nbl, zbins, zbins))
-            cl_3x2pt_5D = np.zeros((n_probes, n_probes, nbl, zbins, zbins))
+            cl_3x2pt_5d_w00 = np.zeros((n_probes, n_probes, nbl, zbins, zbins))
+            cl_3x2pt_5d = np.zeros((n_probes, n_probes, nbl, zbins, zbins))
 
-            cl_3x2pt_5D_w00[0, 0, :, :, :] = cl_ll_3x2pt_3d_w00
-            cl_3x2pt_5D_w00[1, 1, :, :, :] = cl_gg_3x2pt_3d_w00
-            cl_3x2pt_5D_w00[1, 0, :, :, :] = cl_gl_3x2pt_3d_w00
-            cl_3x2pt_5D_w00[0, 1, :, :, :] = np.transpose(cl_gl_3x2pt_3d_w00, (0, 2, 1))
+            cl_3x2pt_5d_w00[0, 0, :, :, :] = cl_ll_3x2pt_3d_w00
+            cl_3x2pt_5d_w00[1, 1, :, :, :] = cl_gg_3x2pt_3d_w00
+            cl_3x2pt_5d_w00[1, 0, :, :, :] = cl_gl_3x2pt_3d_w00
+            cl_3x2pt_5d_w00[0, 1, :, :, :] = np.transpose(cl_gl_3x2pt_3d_w00, (0, 2, 1))
 
-            cl_3x2pt_5D[0, 0, :, :, :] = cl_ll_3x2pt_3d
-            cl_3x2pt_5D[1, 1, :, :, :] = cl_gg_3x2pt_3d
-            cl_3x2pt_5D[1, 0, :, :, :] = cl_gl_3x2pt_3d
-            cl_3x2pt_5D[0, 1, :, :, :] = np.transpose(cl_gl_3x2pt_3d, (0, 2, 1))
+            cl_3x2pt_5d[0, 0, :, :, :] = cl_ll_3x2pt_3d
+            cl_3x2pt_5d[1, 1, :, :, :] = cl_gg_3x2pt_3d
+            cl_3x2pt_5d[1, 0, :, :, :] = cl_gl_3x2pt_3d
+            cl_3x2pt_5d[0, 1, :, :, :] = np.transpose(cl_gl_3x2pt_3d, (0, 2, 1))
 
             # ! quick check
             if plot_cls_tocheck:
@@ -134,23 +151,23 @@ for cosmology_id in range(13, 23):
                 zi, zj = 0, 0
                 plt.figure()
                 plt.loglog(ell_values_old, cl_LL_3D_old[:, zi, zj], label='old', marker='.')
-                plt.loglog(ell_values, cl_3x2pt_5D[0, 0, :, zi, zj], label='new', marker='.')
+                plt.loglog(ell_values, cl_3x2pt_5d[0, 0, :, zi, zj], label='new', marker='.')
                 plt.legend()
 
             # ! Compute covariance
             if cosmology_id == 13:
-                # create a noise with dummy axis for ell, to have the same shape as cl_3x2pt_5D
-                noise_3x2pt_4D = mm.build_noise(zbins, n_probes, sigma_eps2=sigma_eps ** 2, ng=n_gal, EP_or_ED=EP_or_ED)
-                noise_3x2pt_5D = np.zeros((n_probes, n_probes, nbl, zbins, zbins))
+                # create a noise with dummy axis for ell, to have the same shape as cl_3x2pt_5d
+                noise_3x2pt_4d = mm.build_noise(zbins, n_probes, sigma_eps2=sigma_eps ** 2, ng=n_gal, EP_or_ED=EP_or_ED)
+                noise_3x2pt_5d = np.zeros((n_probes, n_probes, nbl, zbins, zbins))
                 for probe_A in (0, 1):
                     for probe_B in (0, 1):
                         for ell_idx in range(nbl):
-                            noise_3x2pt_5D[probe_A, probe_B, ell_idx, :, :] = noise_3x2pt_4D[probe_A, probe_B, ...]
+                            noise_3x2pt_5d[probe_A, probe_B, ell_idx, :, :] = noise_3x2pt_4d[probe_A, probe_B, ...]
 
                 # compute
-                cov_3x2pt_10D_arr_w00 = mm.covariance_einsum(cl_3x2pt_5D_w00, noise_3x2pt_5D, fsky, ell_values,
+                cov_3x2pt_10D_arr_w00 = mm.covariance_einsum(cl_3x2pt_5d_w00, noise_3x2pt_5d, fsky, ell_values,
                                                              delta_values)
-                cov_3x2pt_10D_arr = mm.covariance_einsum(cl_3x2pt_5D, noise_3x2pt_5D, fsky, ell_values, delta_values)
+                cov_3x2pt_10D_arr = mm.covariance_einsum(cl_3x2pt_5d, noise_3x2pt_5d, fsky, ell_values, delta_values)
 
                 # reshape to 4D
                 cov_3x2pt_10D_dict_w00 = mm.cov_10D_array_to_dict(cov_3x2pt_10D_arr_w00)
@@ -169,10 +186,12 @@ for cosmology_id in range(13, 23):
                 # cov_3x2pt_w00_2DCLOE = mm.cov_4D_to_2DCLOE_3x2pt(cov_3x2pt_w00_4D, nbl, zbins)
                 # cov_3x2pt_2DCLOE = mm.cov_4D_to_2DCLOE_3x2pt(cov_3x2pt_4D, nbl, zbins)
 
-                np.save(f'../output/WeightedTest/NoEll{nbl:03d}/cov_3x2pt_2D_w00_{weight_id:02d}_C{cosmology_id}.npy',
+                if weight_id != 0:  # otherwise I'm saving the W00 covariance twice
+                    np.save(
+                        f'../output/WeightedTest/NoEll{nbl:03d}/cov_3x2pt_2D_w00_{weight_id:02d}_C{cosmology_id}.npy',
                         cov_3x2pt_2D_w00)
-                np.save(f'../output/WeightedTest/NoEll{nbl:03d}/cov_3x2pt_2D_{weight_id:02d}_C{cosmology_id}.npy',
-                        cov_3x2pt_2D)
+                    np.save(f'../output/WeightedTest/NoEll{nbl:03d}/cov_3x2pt_2D_{weight_id:02d}_C{cosmology_id}.npy',
+                            cov_3x2pt_2D)
 
             else:
                 cov_3x2pt_2D_w00 = np.load(
@@ -180,58 +199,49 @@ for cosmology_id in range(13, 23):
                 cov_3x2pt_2D = np.load(
                     f'../output/WeightedTest/NoEll{nbl:03d}/cov_3x2pt_2D_{weight_id:02d}_C13.npy')
 
-            # ! Compute differences
-            sigmas_w00 = np.sqrt(np.diag(cov_3x2pt_2D_w00))
-            smape = np.zeros(len(cl_3x2pt_1d))
-            diff_sigma = np.zeros(len(cl_3x2pt_1d))
-            for k in range(len(cl_3x2pt_1d)):
-                smape[k] = mm.compute_smape(cl_3x2pt_1d_w00[k], cl_3x2pt_1d[k])
-                diff_sigma[k] = mm.compute_diff_sigma(cl_3x2pt_1d_w00[k], cl_3x2pt_1d[k], sigmas_w00[k])
+            # ! Compute Cl differences w.r.t. W00
+            if weight_id != 0:
+                sigmas_w00 = np.sqrt(np.diag(cov_3x2pt_2D_w00))
+                smape = np.zeros(len(cl_3x2pt_1d))
+                diff_sigma = np.zeros(len(cl_3x2pt_1d))
+                for k in range(len(cl_3x2pt_1d)):
+                    smape[k] = mm.compute_smape(cl_3x2pt_1d_w00[k], cl_3x2pt_1d[k])
+                    diff_sigma[k] = mm.compute_diff_sigma(cl_3x2pt_1d_w00[k], cl_3x2pt_1d[k], sigmas_w00[k])
 
-            old_diff = mm.percent_diff(cl_3x2pt_1d, cl_3x2pt_1d_w00)
+                plot_differences_func()
 
-            if plot_differences:
-                plt.figure()
-                plt.title(f'case W{weight_id:02d}, C{cosmology_id}, nbl{nbl}')
-                plt.plot(smape, label='SMAPE, uniform weights')
-                plt.plot(diff_sigma, label='abs(diff)/sigma_W00')
-                plt.plot(old_diff, label='old_diff')
-                # plt.plot(cl_3x2pt_1d_w00, label='SMAPE, uniform weights')
-                # plt.plot(cl_3x2pt_1d, label='abs(diff)/sigma_w00')
-                plt.ylabel('difference [%]')
-                plt.xlabel('datavector element')
-                plt.legend()
-
-            header = 'smape [%] \t abs(diff)/sigma_W00 [%]'
-            results_tosave = np.column_stack((smape, diff_sigma))
-            np.savetxt(
-                f'../output/WeightedTest/NoEll{nbl:03d}/cl_difference-C{cosmology_id}-W00-vs-W{weight_id:02d}.dat',
-                results_tosave, header=header)
+                header = 'smape [%] \t abs(diff)/sigma_W00 [%]'
+                results_tosave = np.column_stack((smape, diff_sigma))
+                np.savetxt(
+                    f'../output/WeightedTest/NoEll{nbl:03d}/cl_difference-C{cosmology_id}-W00-vs-W{weight_id:02d}.dat',
+                    results_tosave, header=header)
 
             # ! Compute chi2
 
+            # slice the covariance matrix
+            cov_wl_2D = mm.slice_cov_3x2pt_2D_ell_probe_zpair(cov_3x2pt_2D, nbl, zbins, 'WL')
+            cov_2x2pt_2D = mm.slice_cov_3x2pt_2D_ell_probe_zpair(cov_3x2pt_2D, nbl, zbins, '2x2pt')
 
-            cov_wl_1D_w00 = [0] * nbl
-            for ell_bin in range(nbl):
-                start = ell_bin * zpairs_3x2pt
-                stop = start + zpairs_auto
-                print(ell_bin, start, stop)
-                cov_wl_1D_w00[ell_bin] = cov_3x2pt_2D_w00[start:stop, start:stop]
+            # slice the datavector
+            cl_wl_1d = mm.slice_cl_3x2pt_1D_ell_probe_zpair(cl_3x2pt_1d, nbl, zbins, 'WL')
+            cl_2x2pt_1d = mm.slice_cl_3x2pt_1D_ell_probe_zpair(cl_3x2pt_1d, nbl, zbins, '2x2pt')
 
-            cov_wl_2D_w00 = scipy.linalg.block_diag(*cov_wl_1D_w00)
+            # check the slicing
+            cl_LL_5d = cl_3x2pt_5d[0, 0, ...][np.newaxis, np.newaxis, ...]
+            noise_LL_5d = noise_3x2pt_5d[0, 0, ...][np.newaxis, np.newaxis, ...]
+            cov_GO_WL_6D = mm.covariance_einsum(cl_LL_5d, noise_LL_5d, fsky, ell_values, delta_values)[0, 0, 0, 0, ...]
+            cov_GO_WL_4D = mm.cov_6D_to_4D(cov_GO_WL_6D, nbl, zpairs_auto, ind_auto)
+            cov_GO_WL_2D = mm.cov_4D_to_2D(cov_GO_WL_4D, block_index=block_index)
 
+            cl_wl_1d_v2 = mm.cl_3D_to_1D(cl_LL_5d[0, 0, ...], ind, True, block_index)
 
+            plt.figure()
+            plt.plot(cl_wl_1d_v2, label='v2')
+            plt.plot(cl_wl_1d, label='v1', ls='--')
 
-            mm.matshow(cov_wl_2D_w00, log=True)
-            assert False
-
-
-
-            i = 0
-            for ell_bin in range(nbl):
-                for ij in range(zpairs_auto):
-                    cl_wl_1d_w00[i] = cl_3x2pt_1d_w00[ij + ell_bin * zpairs_3x2pt]
-                    i += 1
+            assert np.array_equal(cov_GO_WL_2D, cov_wl_2D)
+            assert np.array_equal(cl_wl_1d_v2, cl_wl_1d)
+            assert False, 'stop here'
 
             inv_cov_3x2pt_2D_w00 = np.linalg.inv(cov_3x2pt_2D_w00)
             chi2_3x2pt_w00 = cl_3x2pt_1d_w00 @ inv_cov_3x2pt_2D_w00 @ cl_3x2pt_1d_w00
