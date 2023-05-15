@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import json
 import yaml
+import scipy
 
 import matplotlib
 
@@ -82,10 +83,13 @@ for cosmology_id in range(13, 23):
                 f'{input_folder}/NoEll{nbl:03d}/dv-3x2pt-LiFE-C{cosmology_id}-W00.dat')  # reference
             cl_3x2pt_1d = np.genfromtxt(
                 f'{input_folder}/NoEll{nbl:03d}/dv-3x2pt-LiFE-C{cosmology_id}-W{weight_id:02d}.dat')
+
             elements_auto = nbl * zpairs_auto
             elements_cross = nbl * zpairs_cross
+            elements_3x2pt = nbl * zpairs_3x2pt
+            elements_2x2pt = elements_cross + elements_auto  # GGL + GCph
 
-            assert len(cl_3x2pt_1d) == 2 * elements_auto + elements_cross, \
+            assert len(cl_3x2pt_1d) == 2 * elements_auto + elements_cross == elements_3x2pt, \
                 'wrong number of elements in the 3x2pt 1d data vector'
 
             cl_3x2pt_2d_w00 = cl_3x2pt_1d_w00.reshape((nbl, zpairs_3x2pt))
@@ -172,9 +176,9 @@ for cosmology_id in range(13, 23):
 
             else:
                 cov_3x2pt_2D_w00 = np.load(
-                    f'../output/WeightedTest/NoEll{nbl:03d}/cov_3x2pt_2D_w00_{weight_id:02d}_C{cosmology_id}.npy')
+                    f'../output/WeightedTest/NoEll{nbl:03d}/cov_3x2pt_2D_w00_{weight_id:02d}_C13.npy')
                 cov_3x2pt_2D = np.load(
-                    f'../output/WeightedTest/NoEll{nbl:03d}/cov_3x2pt_2D_{weight_id:02d}_C{cosmology_id}.npy')
+                    f'../output/WeightedTest/NoEll{nbl:03d}/cov_3x2pt_2D_{weight_id:02d}_C13.npy')
 
             # ! Compute differences
             sigmas_w00 = np.sqrt(np.diag(cov_3x2pt_2D_w00))
@@ -201,8 +205,36 @@ for cosmology_id in range(13, 23):
             header = 'smape [%] \t abs(diff)/sigma_W00 [%]'
             results_tosave = np.column_stack((smape, diff_sigma))
             np.savetxt(
-                f'../output/WeightedTest/NoEll{nbl:03d}/cl_difference-C{cosmology_id}-W00-vs-{weight_id:02d}.dat',
+                f'../output/WeightedTest/NoEll{nbl:03d}/cl_difference-C{cosmology_id}-W00-vs-W{weight_id:02d}.dat',
                 results_tosave, header=header)
+
+            # ! Compute chi2
+
+
+            cov_wl_1D_w00 = [0] * nbl
+            for ell_bin in range(nbl):
+                start = ell_bin * zpairs_3x2pt
+                stop = start + zpairs_auto
+                print(ell_bin, start, stop)
+                cov_wl_1D_w00[ell_bin] = cov_3x2pt_2D_w00[start:stop, start:stop]
+
+            cov_wl_2D_w00 = scipy.linalg.block_diag(*cov_wl_1D_w00)
+
+
+
+            mm.matshow(cov_wl_2D_w00, log=True)
+            assert False
+
+
+
+            i = 0
+            for ell_bin in range(nbl):
+                for ij in range(zpairs_auto):
+                    cl_wl_1d_w00[i] = cl_3x2pt_1d_w00[ij + ell_bin * zpairs_3x2pt]
+                    i += 1
+
+            inv_cov_3x2pt_2D_w00 = np.linalg.inv(cov_3x2pt_2D_w00)
+            chi2_3x2pt_w00 = cl_3x2pt_1d_w00 @ inv_cov_3x2pt_2D_w00 @ cl_3x2pt_1d_w00
 
             if weight_id == 0 and nbl == 32:
                 try:
@@ -235,4 +267,4 @@ for cosmology_id in range(13, 23):
             del cov_3x2pt_2D
             gc.collect()
 
-            print(f'case {nbl} bins, weights {weight_id}, cosmology_id {cosmology_id} done')
+            print(f'case {nbl} ell bins, W{weight_id:02d}, cosmology C{cosmology_id} done')
