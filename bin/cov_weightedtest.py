@@ -82,7 +82,7 @@ for cosmology_id in range(13, 23):
     for nbl in (32,):
         for weight_id in range(0, 3):
 
-            print(f'cosmology {cosmology_id}, nbl {nbl}, weight {weight_id}')
+            print(f'cosmology C{cosmology_id}, nbl {nbl}, weight {weight_id}')
 
             # ! ell binning
             ell_values, delta_values, ell_bin_edges = utils.compute_ells(nbl, ell_min, ell_max, recipe='ISTF',
@@ -200,20 +200,24 @@ for cosmology_id in range(13, 23):
 
                 # save the covariance for 3x2pt (used to compute sigmas_w00) and the inverse covariance for the
                 # sliced cases (used to compute the chi2)
-                np.savez_compressed(f'{output_folder}/NoEll{nbl:03d}/cov_3x2pt_2D_W{weight_id:02d}_C{cosmology_id}.nzp',
-                        cov_3x2pt_2D_w00)
-                np.savez_compressed(f'{output_folder}/NoEll{nbl:03d}/inv_cov_wl_2D_W{weight_id:02d}_C{cosmology_id}.nzp',
-                        inv_cov_wl_2D_w00)
-                np.savez_compressed(f'{output_folder}/NoEll{nbl:03d}/inv_cov_2x2pt_2D_W{weight_id:02d}_C{cosmology_id}.nzp',
-                        inv_cov_2x2pt_2D_w00)
-                np.savez_compressed(f'{output_folder}/NoEll{nbl:03d}/inv_cov_3x2pt_2D_W{weight_id:02d}_C{cosmology_id}.nzp',
-                        inv_cov_3x2pt_2D_w00)
+                np.savez_compressed(
+                    f'{output_folder}/NoEll{nbl:03d}/cov_3x2pt_2D_W{weight_id:02d}_C{cosmology_id}.npz',
+                    cov_3x2pt_2D_w00)
+                np.savez_compressed(
+                    f'{output_folder}/NoEll{nbl:03d}/inv_cov_wl_2D_W{weight_id:02d}_C{cosmology_id}.npz',
+                    inv_cov_wl_2D_w00)
+                np.savez_compressed(
+                    f'{output_folder}/NoEll{nbl:03d}/inv_cov_2x2pt_2D_W{weight_id:02d}_C{cosmology_id}.npz',
+                    inv_cov_2x2pt_2D_w00)
+                np.savez_compressed(
+                    f'{output_folder}/NoEll{nbl:03d}/inv_cov_3x2pt_2D_W{weight_id:02d}_C{cosmology_id}.npz',
+                    inv_cov_3x2pt_2D_w00)
 
             else:
-                cov_3x2pt_2D_w00 = np.load(f'{output_folder}/NoEll{nbl:03d}/cov_3x2pt_2D_W00_C13.npy')['arr_0']
-                inv_cov_wl_2D_w00 = np.load(f'{output_folder}/NoEll{nbl:03d}/inv_cov_wl_2D_W00_C13.npy')['arr_0']
-                inv_cov_2x2pt_2D_w00 = np.load(f'{output_folder}/NoEll{nbl:03d}/inv_cov_2x2pt_2D_W00_C13.npy')['arr_0']
-                inv_cov_3x2pt_2D_w00 = np.load(f'{output_folder}/NoEll{nbl:03d}/inv_cov_3x2pt_2D_W00_C13.npy')['arr_0']
+                cov_3x2pt_2D_w00 = np.load(f'{output_folder}/NoEll{nbl:03d}/cov_3x2pt_2D_W00_C13.npz')['arr_0']
+                inv_cov_wl_2D_w00 = np.load(f'{output_folder}/NoEll{nbl:03d}/inv_cov_wl_2D_W00_C13.npz')['arr_0']
+                inv_cov_2x2pt_2D_w00 = np.load(f'{output_folder}/NoEll{nbl:03d}/inv_cov_2x2pt_2D_W00_C13.npz')['arr_0']
+                inv_cov_3x2pt_2D_w00 = np.load(f'{output_folder}/NoEll{nbl:03d}/inv_cov_3x2pt_2D_W00_C13.npz')['arr_0']
 
             # ! Comparisons wrt W00
             if weight_id != 0:
@@ -254,6 +258,19 @@ for cosmology_id in range(13, 23):
                     'Chi2(2x2pt)': chi2_2x2pt,
                     'Chi2(3x2pt)': chi2_3x2pt,
                 }, ignore_index=True)
+
+for nbl in (32, 64, 128):
+    # build the columns to save in the file
+    results_table = np.zeros((len(results_df['Cosmology'].unique()), 6))
+    column = 0
+    for which_chi2 in ('Chi2(WL)', 'Chi2(2x2pt)', 'Chi2(3x2pt)'):
+        for which_weight in (1, 2):
+            results_table[:, column] = results_df[(results_df['Weight'] == which_weight) & (
+                    results_df['nbl'] == nbl)][which_chi2].values
+            column += 1
+
+    np.savetxt(f'{output_folder}/NoEll{nbl:03d}/chi2Table.dat',)
+
 
 assert False, 'stop here'
 
