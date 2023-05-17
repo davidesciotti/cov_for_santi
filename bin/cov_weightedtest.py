@@ -80,7 +80,9 @@ results_df = pd.DataFrame()
 
 for cosmology_id in range(13, 23):
     for nbl in (32,):
-        for weight_id in range(1, 3):
+        for weight_id in range(0, 3):
+
+            print(f'cosmology {cosmology_id}, nbl {nbl}, weight {weight_id}')
 
             # ! ell binning
             ell_values, delta_values, ell_bin_edges = utils.compute_ells(nbl, ell_min, ell_max, recipe='ISTF',
@@ -158,7 +160,8 @@ for cosmology_id in range(13, 23):
                 plt.legend()
 
             # ! Compute covariance *only for the C13 case*!!
-            if cosmology_id == 13:
+            if cosmology_id == 13 and weight_id == 0:
+
                 # create a noise with dummy axis for ell, to have the same shape as cl_3x2pt_5d
                 noise_3x2pt_4d = mm.build_noise(zbins, n_probes, sigma_eps2=sigma_eps ** 2, ng=n_gal, EP_or_ED=EP_or_ED)
                 noise_3x2pt_5d = np.zeros((n_probes, n_probes, nbl, zbins, zbins))
@@ -167,7 +170,7 @@ for cosmology_id in range(13, 23):
                         for ell_idx in range(nbl):
                             noise_3x2pt_5d[probe_A, probe_B, ell_idx, :, :] = noise_3x2pt_4d[probe_A, probe_B, ...]
 
-                # compute
+                # compute 3x2pt covariance *for w00*
                 cov_3x2pt_10D_arr_w00 = mm.covariance_einsum(cl_3x2pt_5d_w00, noise_3x2pt_5d, fsky, ell_values,
                                                              delta_values)
 
@@ -182,32 +185,40 @@ for cosmology_id in range(13, 23):
                 # reshape to 2D
                 cov_3x2pt_2D_w00 = mm.cov_4D_to_2D(cov_3x2pt_4D_w00, block_index=block_index)
                 # cov_3x2pt_w00_2DCLOE = mm.cov_4D_to_2DCLOE_3x2pt(cov_3x2pt_w00_4D, nbl, zbins)
-                # cov_3x2pt_2DCLOE = mm.cov_4D_to_2DCLOE_3x2pt(cov_3x2pt_4D, nbl, zbins)
 
-                # slice the covariance matrix
+                # slice
                 cov_wl_2D_w00 = mm.slice_cov_3x2pt_2D_ell_probe_zpair(cov_3x2pt_2D_w00, nbl, zbins, 'WL')
                 cov_2x2pt_2D_w00 = mm.slice_cov_3x2pt_2D_ell_probe_zpair(cov_3x2pt_2D_w00, nbl, zbins, '2x2pt')
 
-                # invert the covariance matrix and compute chi2
-                # TODO pull out of the cosmology for loop, you always have to use C13...
+                # invert
+                print('Inverting covariance matrices...')
+                start = time.perf_counter()
                 inv_cov_wl_2D_w00 = np.linalg.inv(cov_wl_2D_w00)
                 inv_cov_2x2pt_2D_w00 = np.linalg.inv(cov_2x2pt_2D_w00)
                 inv_cov_3x2pt_2D_w00 = np.linalg.inv(cov_3x2pt_2D_w00)
+                print(f'...done in {time.perf_counter() - start:.2f} seconds')
 
-                if weight_id != 0:  # otherwise I'm saving the W00 covariance twice
-                    np.save(f'{output_folder}/NoEll{nbl:03d}/cov_3x2pt_2D_w00_{weight_id:02d}_C{cosmology_id}.npy',
+                # save the covariance for 3x2pt (used to compute sigmas_w00) and the inverse covariance for the
+                # sliced cases (used to compute the chi2)
+                np.savez_compressed(f'{output_folder}/NoEll{nbl:03d}/cov_3x2pt_2D_W{weight_id:02d}_C{cosmology_id}.nzp',
                         cov_3x2pt_2D_w00)
-                    np.save(f'{output_folder}/NoEll{nbl:03d}/cov_3x2pt_2D_{weight_id:02d}_C{cosmology_id}.npy',
-                            cov_3x2pt_2D)
+                np.savez_compressed(f'{output_folder}/NoEll{nbl:03d}/inv_cov_wl_2D_W{weight_id:02d}_C{cosmology_id}.nzp',
+                        inv_cov_wl_2D_w00)
+                np.savez_compressed(f'{output_folder}/NoEll{nbl:03d}/inv_cov_2x2pt_2D_W{weight_id:02d}_C{cosmology_id}.nzp',
+                        inv_cov_2x2pt_2D_w00)
+                np.savez_compressed(f'{output_folder}/NoEll{nbl:03d}/inv_cov_3x2pt_2D_W{weight_id:02d}_C{cosmology_id}.nzp',
+                        inv_cov_3x2pt_2D_w00)
 
             else:
-                cov_3x2pt_2D_w00 = np.load(
-                    f'../output/WeightedTest/NoEll{nbl:03d}/cov_3x2pt_2D_w00_{weight_id:02d}_C13.npy')
-                cov_3x2pt_2D = np.load(
-                    f'../output/WeightedTest/NoEll{nbl:03d}/cov_3x2pt_2D_{weight_id:02d}_C13.npy')
+                cov_3x2pt_2D_w00 = np.load(f'{output_folder}/NoEll{nbl:03d}/cov_3x2pt_2D_W00_C13.npy')['arr_0']
+                inv_cov_wl_2D_w00 = np.load(f'{output_folder}/NoEll{nbl:03d}/inv_cov_wl_2D_W00_C13.npy')['arr_0']
+                inv_cov_2x2pt_2D_w00 = np.load(f'{output_folder}/NoEll{nbl:03d}/inv_cov_2x2pt_2D_W00_C13.npy')['arr_0']
+                inv_cov_3x2pt_2D_w00 = np.load(f'{output_folder}/NoEll{nbl:03d}/inv_cov_3x2pt_2D_W00_C13.npy')['arr_0']
 
-            # ! Compute Cl differences w.r.t. W00
+            # ! Comparisons wrt W00
             if weight_id != 0:
+
+                # ! Compute Cl differences
                 sigmas_w00 = np.sqrt(np.diag(cov_3x2pt_2D_w00))
                 smape = np.zeros(len(cl_3x2pt_1d))
                 diff_sigma = np.zeros(len(cl_3x2pt_1d))
@@ -223,25 +234,26 @@ for cosmology_id in range(13, 23):
                     f'../output/WeightedTest/NoEll{nbl:03d}/cl_difference-C{cosmology_id}-W00-vs-W{weight_id:02d}.dat',
                     results_tosave, header=header)
 
-            # ! Compute chi2
-            # slice the datavector
-            cl_wl_1d_w00 = mm.slice_cl_3x2pt_1D_ell_probe_zpair(cl_3x2pt_1d_w00, nbl, zbins, 'WL')
-            cl_wl_1d = mm.slice_cl_3x2pt_1D_ell_probe_zpair(cl_3x2pt_1d, nbl, zbins, 'WL')
-            cl_2x2pt_1d_w00 = mm.slice_cl_3x2pt_1D_ell_probe_zpair(cl_3x2pt_1d_w00, nbl, zbins, '2x2pt')
-            cl_2x2pt_1d = mm.slice_cl_3x2pt_1D_ell_probe_zpair(cl_3x2pt_1d, nbl, zbins, '2x2pt')
+                # ! Compute chi2
+                # slice the datavector
+                cl_wl_1d_w00 = mm.slice_cl_3x2pt_1D_ell_probe_zpair(cl_3x2pt_1d_w00, nbl, zbins, 'WL')
+                cl_wl_1d = mm.slice_cl_3x2pt_1D_ell_probe_zpair(cl_3x2pt_1d, nbl, zbins, 'WL')
+                cl_2x2pt_1d_w00 = mm.slice_cl_3x2pt_1D_ell_probe_zpair(cl_3x2pt_1d_w00, nbl, zbins, '2x2pt')
+                cl_2x2pt_1d = mm.slice_cl_3x2pt_1D_ell_probe_zpair(cl_3x2pt_1d, nbl, zbins, '2x2pt')
 
-            chi2_wl = (cl_wl_1d - cl_wl_1d_w00) @ inv_cov_wl_2D_w00 @ (cl_wl_1d - cl_wl_1d_w00)
-            chi2_2x2pt = (cl_2x2pt_1d - cl_2x2pt_1d_w00) @ inv_cov_2x2pt_2D_w00 @ (cl_2x2pt_1d - cl_2x2pt_1d_w00)
-            chi2_3x2pt = (cl_3x2pt_1d - cl_3x2pt_1d_w00) @ inv_cov_3x2pt_2D_w00 @ (cl_3x2pt_1d - cl_3x2pt_1d_w00)
+                chi2_wl = (cl_wl_1d - cl_wl_1d_w00) @ inv_cov_wl_2D_w00 @ (cl_wl_1d - cl_wl_1d_w00)
+                chi2_2x2pt = (cl_2x2pt_1d - cl_2x2pt_1d_w00) @ inv_cov_2x2pt_2D_w00 @ (cl_2x2pt_1d - cl_2x2pt_1d_w00)
+                chi2_3x2pt = (cl_3x2pt_1d - cl_3x2pt_1d_w00) @ inv_cov_3x2pt_2D_w00 @ (cl_3x2pt_1d - cl_3x2pt_1d_w00)
 
-            # append results to pd dataframe
-            results_df = results_df.append({
-                'Cosmology': cosmology_id,
-                'Weight': weight_id,
-                'Chi2(WL)': chi2_wl,
-                'Chi2(2x2pt)': chi2_2x2pt,
-                'Chi2(3x2pt)': chi2_3x2pt,
-            }, ignore_index=True)
+                # append results to pd dataframe
+                results_df = results_df.append({
+                    'Cosmology': cosmology_id,
+                    'Weight': weight_id,
+                    'nbl': nbl,
+                    'Chi2(WL)': chi2_wl,
+                    'Chi2(2x2pt)': chi2_2x2pt,
+                    'Chi2(3x2pt)': chi2_3x2pt,
+                }, ignore_index=True)
 
 assert False, 'stop here'
 
