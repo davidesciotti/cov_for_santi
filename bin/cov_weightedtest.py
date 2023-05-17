@@ -157,7 +157,7 @@ for cosmology_id in range(13, 23):
                 plt.loglog(ell_values, cl_3x2pt_5d[0, 0, :, zi, zj], label='new', marker='.')
                 plt.legend()
 
-            # ! Compute covariance
+            # ! Compute covariance *only for the C13 case*!!
             if cosmology_id == 13:
                 # create a noise with dummy axis for ell, to have the same shape as cl_3x2pt_5d
                 noise_3x2pt_4d = mm.build_noise(zbins, n_probes, sigma_eps2=sigma_eps ** 2, ng=n_gal, EP_or_ED=EP_or_ED)
@@ -170,30 +170,34 @@ for cosmology_id in range(13, 23):
                 # compute
                 cov_3x2pt_10D_arr_w00 = mm.covariance_einsum(cl_3x2pt_5d_w00, noise_3x2pt_5d, fsky, ell_values,
                                                              delta_values)
-                cov_3x2pt_10D_arr = mm.covariance_einsum(cl_3x2pt_5d, noise_3x2pt_5d, fsky, ell_values, delta_values)
 
                 # reshape to 4D
                 cov_3x2pt_10D_dict_w00 = mm.cov_10D_array_to_dict(cov_3x2pt_10D_arr_w00)
-                cov_3x2pt_10D_dict = mm.cov_10D_array_to_dict(cov_3x2pt_10D_arr)
                 cov_3x2pt_4D_w00 = mm.cov_3x2pt_dict_10D_to_4D(cov_3x2pt_10D_dict_w00, probe_ordering,
                                                                nbl, zbins, ind.copy(), GL_or_LG)
-                cov_3x2pt_4D = mm.cov_3x2pt_dict_10D_to_4D(cov_3x2pt_10D_dict, probe_ordering,
-                                                           nbl, zbins, ind.copy(), GL_or_LG)
 
-                del cov_3x2pt_10D_dict_w00, cov_3x2pt_10D_dict, cov_3x2pt_10D_arr_w00, cov_3x2pt_10D_arr
+                del cov_3x2pt_10D_dict_w00, cov_3x2pt_10D_arr_w00
                 gc.collect()
 
                 # reshape to 2D
                 cov_3x2pt_2D_w00 = mm.cov_4D_to_2D(cov_3x2pt_4D_w00, block_index=block_index)
-                cov_3x2pt_2D = mm.cov_4D_to_2D(cov_3x2pt_4D, block_index=block_index)
                 # cov_3x2pt_w00_2DCLOE = mm.cov_4D_to_2DCLOE_3x2pt(cov_3x2pt_w00_4D, nbl, zbins)
                 # cov_3x2pt_2DCLOE = mm.cov_4D_to_2DCLOE_3x2pt(cov_3x2pt_4D, nbl, zbins)
 
+                # slice the covariance matrix
+                cov_wl_2D_w00 = mm.slice_cov_3x2pt_2D_ell_probe_zpair(cov_3x2pt_2D_w00, nbl, zbins, 'WL')
+                cov_2x2pt_2D_w00 = mm.slice_cov_3x2pt_2D_ell_probe_zpair(cov_3x2pt_2D_w00, nbl, zbins, '2x2pt')
+
+                # invert the covariance matrix and compute chi2
+                # TODO pull out of the cosmology for loop, you always have to use C13...
+                inv_cov_wl_2D_w00 = np.linalg.inv(cov_wl_2D_w00)
+                inv_cov_2x2pt_2D_w00 = np.linalg.inv(cov_2x2pt_2D_w00)
+                inv_cov_3x2pt_2D_w00 = np.linalg.inv(cov_3x2pt_2D_w00)
+
                 if weight_id != 0:  # otherwise I'm saving the W00 covariance twice
-                    np.save(
-                        f'../output/WeightedTest/NoEll{nbl:03d}/cov_3x2pt_2D_w00_{weight_id:02d}_C{cosmology_id}.npy',
+                    np.save(f'{output_folder}/NoEll{nbl:03d}/cov_3x2pt_2D_w00_{weight_id:02d}_C{cosmology_id}.npy',
                         cov_3x2pt_2D_w00)
-                    np.save(f'../output/WeightedTest/NoEll{nbl:03d}/cov_3x2pt_2D_{weight_id:02d}_C{cosmology_id}.npy',
+                    np.save(f'{output_folder}/NoEll{nbl:03d}/cov_3x2pt_2D_{weight_id:02d}_C{cosmology_id}.npy',
                             cov_3x2pt_2D)
 
             else:
@@ -220,24 +224,15 @@ for cosmology_id in range(13, 23):
                     results_tosave, header=header)
 
             # ! Compute chi2
-
-            # slice the covariance matrix
-            cov_wl_2D = mm.slice_cov_3x2pt_2D_ell_probe_zpair(cov_3x2pt_2D, nbl, zbins, 'WL')
-            cov_2x2pt_2D = mm.slice_cov_3x2pt_2D_ell_probe_zpair(cov_3x2pt_2D, nbl, zbins, '2x2pt')
-
             # slice the datavector
+            cl_wl_1d_w00 = mm.slice_cl_3x2pt_1D_ell_probe_zpair(cl_3x2pt_1d_w00, nbl, zbins, 'WL')
             cl_wl_1d = mm.slice_cl_3x2pt_1D_ell_probe_zpair(cl_3x2pt_1d, nbl, zbins, 'WL')
+            cl_2x2pt_1d_w00 = mm.slice_cl_3x2pt_1D_ell_probe_zpair(cl_3x2pt_1d_w00, nbl, zbins, '2x2pt')
             cl_2x2pt_1d = mm.slice_cl_3x2pt_1D_ell_probe_zpair(cl_3x2pt_1d, nbl, zbins, '2x2pt')
 
-            # invert the covariance matrix and compute chi2
-            # TODO pull out of the cosmology for loop, you always have to use C13...
-            inv_cov_wl_2D = np.linalg.inv(cov_wl_2D)
-            inv_cov_2x2pt_2D = np.linalg.inv(cov_2x2pt_2D)
-            inv_cov_3x2pt_2D = np.linalg.inv(cov_3x2pt_2D)
-
-            chi2_wl = (cl_wl_1d - cl_wl_1d_w00) @ inv_cov_wl_2D @ (cl_wl_1d - cl_wl_1d_w00)
-            chi2_2x2pt = (cl_2x2pt_1d - cl_2x2pt_1d_w00) @ inv_cov_2x2pt_2D @ (cl_2x2pt_1d - cl_2x2pt_1d_w00)
-            chi2_3x2pt = (cl_3x2pt_1d - cl_3x2pt_1d_w00) @ inv_cov_3x2pt_2D @ (cl_3x2pt_1d - cl_3x2pt_1d_w00)
+            chi2_wl = (cl_wl_1d - cl_wl_1d_w00) @ inv_cov_wl_2D_w00 @ (cl_wl_1d - cl_wl_1d_w00)
+            chi2_2x2pt = (cl_2x2pt_1d - cl_2x2pt_1d_w00) @ inv_cov_2x2pt_2D_w00 @ (cl_2x2pt_1d - cl_2x2pt_1d_w00)
+            chi2_3x2pt = (cl_3x2pt_1d - cl_3x2pt_1d_w00) @ inv_cov_3x2pt_2D_w00 @ (cl_3x2pt_1d - cl_3x2pt_1d_w00)
 
             # append results to pd dataframe
             results_df = results_df.append({
@@ -248,40 +243,38 @@ for cosmology_id in range(13, 23):
                 'Chi2(3x2pt)': chi2_3x2pt,
             }, ignore_index=True)
 
-
-
 assert False, 'stop here'
 
-            #
-            # if weight_id == 0 and nbl == 32:
-            #     try:
-            #         cov_bench = np.genfromtxt(
-            #             f'../input/cl_LiFE/WeightedTest/NoEll{nbl:03d}/cm-3x2pt-LiFE-C{cosmology_id}-W{weight_id:02d}.dat')
-            #
-            #         assert np.allclose(cov_bench, cov_3x2pt_2D, rtol=1e-4,
-            #                            atol=0), 'covariance matrix is not the same as vincenzo\'s'
-            #     except FileNotFoundError:
-            #         print(f'no benchmark covariance matrix found for case nbl{nbl}-C{cosmology_id}-W{weight_id:02d}')
-            #
-            # other_quantities_tosave = {
-            #     'n_gal [arcmin^{-2}]': list(n_gal),
-            #     'survey_area [deg^2]': survey_area,
-            #     'sigma_eps': sigma_eps,
-            # }
-            #
-            # # np.savetxt(f'../output/cl_LiFE/WeightedTest/NoEll{nbl:03d}/CovMat-3x2pt-Gauss-{nbl}Bins.txt', cov_3x2pt_2DCLOE)
-            # # np.savetxt(f'{output_folder}/NoEll{nbl:03d}/cm-3x2pt-LiFE-C{cosmology_id}-W{weight_id:02d}.dat', cov_3x2pt_2D,
-            # #            fmt='%.8e')
-            #
-            # ell_grid_header = f'ell_bins = {nbl}\tell_min = {ell_min}\tell_max = {ell_max}\n' \
-            #                   f'ell_bin_lower_edge\tell_bin_upper_edge\tell_bin_center\tdelta_ell'
-            # ell_grid = np.column_stack((ell_bin_lower_edges, ell_bin_upper_edges, ell_values, delta_values))
-            # np.savetxt(f'{output_folder}/NoEll{nbl:03d}/ell_grid.txt', ell_grid, header=ell_grid_header)
-            #
-            # with open(f'{output_folder}/NoEll{nbl:03d}/other_specs.txt', 'w') as file:
-            #     file.write(json.dumps(other_quantities_tosave))
-            #
-            # del cov_3x2pt_2D
-            # gc.collect()
-            #
-            # print(f'case {nbl} ell bins, W{weight_id:02d}, cosmology C{cosmology_id} done')
+#
+# if weight_id == 0 and nbl == 32:
+#     try:
+#         cov_bench = np.genfromtxt(
+#             f'../input/cl_LiFE/WeightedTest/NoEll{nbl:03d}/cm-3x2pt-LiFE-C{cosmology_id}-W{weight_id:02d}.dat')
+#
+#         assert np.allclose(cov_bench, cov_3x2pt_2D, rtol=1e-4,
+#                            atol=0), 'covariance matrix is not the same as vincenzo\'s'
+#     except FileNotFoundError:
+#         print(f'no benchmark covariance matrix found for case nbl{nbl}-C{cosmology_id}-W{weight_id:02d}')
+#
+# other_quantities_tosave = {
+#     'n_gal [arcmin^{-2}]': list(n_gal),
+#     'survey_area [deg^2]': survey_area,
+#     'sigma_eps': sigma_eps,
+# }
+#
+# # np.savetxt(f'../output/cl_LiFE/WeightedTest/NoEll{nbl:03d}/CovMat-3x2pt-Gauss-{nbl}Bins.txt', cov_3x2pt_2DCLOE)
+# # np.savetxt(f'{output_folder}/NoEll{nbl:03d}/cm-3x2pt-LiFE-C{cosmology_id}-W{weight_id:02d}.dat', cov_3x2pt_2D,
+# #            fmt='%.8e')
+#
+# ell_grid_header = f'ell_bins = {nbl}\tell_min = {ell_min}\tell_max = {ell_max}\n' \
+#                   f'ell_bin_lower_edge\tell_bin_upper_edge\tell_bin_center\tdelta_ell'
+# ell_grid = np.column_stack((ell_bin_lower_edges, ell_bin_upper_edges, ell_values, delta_values))
+# np.savetxt(f'{output_folder}/NoEll{nbl:03d}/ell_grid.txt', ell_grid, header=ell_grid_header)
+#
+# with open(f'{output_folder}/NoEll{nbl:03d}/other_specs.txt', 'w') as file:
+#     file.write(json.dumps(other_quantities_tosave))
+#
+# del cov_3x2pt_2D
+# gc.collect()
+#
+# print(f'case {nbl} ell bins, W{weight_id:02d}, cosmology C{cosmology_id} done')
