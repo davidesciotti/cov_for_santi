@@ -257,20 +257,28 @@ for cosmology_id in range(13, 23):
                     'Chi2(WL)': chi2_wl,
                     'Chi2(2x2pt)': chi2_2x2pt,
                     'Chi2(3x2pt)': chi2_3x2pt,
+                    'redChi2(WL)': chi2_wl / len(cl_2x2pt_1d),
+                    'redChi2(2x2pt)': chi2_2x2pt / len(cl_2x2pt_1d),
+                    'redChi2(3x2pt)': chi2_3x2pt / len(cl_3x2pt_1d),
                 }, ignore_index=True)
 
-for nbl in (32, 64, 128):
+for nbl in (32,):
+
+    chi2_header = f'Chi2(WL)-W00-vs-W01 \t Chi2(WL)-W00-vs-W02 \t ' \
+                  f'Chi2(2x2pt)-W00-vs-W01 \t Chi2(2x2pt)-W00-vs-W02 \t ' \
+                  f'Chi2(3x2pt)-W00-vs-W01 \t Chi2(3x2pt)-W00-vs-W02 \t nbl {nbl} \n' \
+                  f'rows: C13 to C22'
+
     # build the columns to save in the file
-    results_table = np.zeros((len(results_df['Cosmology'].unique()), 6))
+    chi2_table = np.zeros((len(results_df['Cosmology'].unique()), 6))
     column = 0
     for which_chi2 in ('Chi2(WL)', 'Chi2(2x2pt)', 'Chi2(3x2pt)'):
         for which_weight in (1, 2):
-            results_table[:, column] = results_df[(results_df['Weight'] == which_weight) & (
+            chi2_table[:, column] = results_df[(results_df['Weight'] == which_weight) & (
                     results_df['nbl'] == nbl)][which_chi2].values
             column += 1
 
-    np.savetxt(f'{output_folder}/NoEll{nbl:03d}/chi2Table.dat',)
-
+    np.savetxt(f'{output_folder}/NoEll{nbl:03d}/chi2Table.dat', chi2_table, header=chi2_header)
 
 assert False, 'stop here'
 
