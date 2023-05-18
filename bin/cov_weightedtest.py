@@ -79,7 +79,7 @@ ind_cross = ind[zpairs_auto:zpairs_auto + zpairs_cross, :]
 results_df = pd.DataFrame()
 
 for cosmology_id in range(13, 23):
-    for nbl in (32,):
+    for nbl in (128,):
         for weight_id in range(0, 3):
 
             print(f'cosmology C{cosmology_id}, nbl {nbl}, weight {weight_id}')
@@ -235,7 +235,7 @@ for cosmology_id in range(13, 23):
                 header = 'smape [%] \t abs(diff)/sigma_W00 [%]'
                 results_tosave = np.column_stack((smape, diff_sigma))
                 np.savetxt(
-                    f'../output/WeightedTest/NoEll{nbl:03d}/cl_difference-C{cosmology_id}-W00-vs-W{weight_id:02d}.dat',
+                    f'../output/WeightedTest/NoEll{nbl:03d}/W00-differences/cl_difference-C{cosmology_id}-W00-vs-W{weight_id:02d}.dat',
                     results_tosave, header=header)
 
                 # ! Compute chi2
@@ -262,7 +262,7 @@ for cosmology_id in range(13, 23):
                     'redChi2(3x2pt)': chi2_3x2pt / len(cl_3x2pt_1d),
                 }, ignore_index=True)
 
-for nbl in (32,):
+for nbl in (nbl,):
 
     chi2_header = f'Chi2(WL)-W00-vs-W01 \t Chi2(WL)-W00-vs-W02 \t ' \
                   f'Chi2(2x2pt)-W00-vs-W01 \t Chi2(2x2pt)-W00-vs-W02 \t ' \
@@ -278,7 +278,7 @@ for nbl in (32,):
                     results_df['nbl'] == nbl)][which_chi2].values
             column += 1
 
-    np.savetxt(f'{output_folder}/NoEll{nbl:03d}/chi2Table.dat', chi2_table, header=chi2_header)
+    np.savetxt(f'{output_folder}/NoEll{nbl:03d}/W00-differences/chi2Table.dat', chi2_table, header=chi2_header)
 
 assert False, 'stop here'
 
