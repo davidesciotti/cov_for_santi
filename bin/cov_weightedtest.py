@@ -190,28 +190,31 @@ for cosmology_id in range(13, 23):
                 cov_wl_2D_w00 = mm.slice_cov_3x2pt_2D_ell_probe_zpair(cov_3x2pt_2D_w00, nbl, zbins, 'WL')
                 cov_2x2pt_2D_w00 = mm.slice_cov_3x2pt_2D_ell_probe_zpair(cov_3x2pt_2D_w00, nbl, zbins, '2x2pt')
 
-                # invert
+                np.savez_compressed(
+                    f'{output_folder}/NoEll{nbl:03d}/cov_3x2pt_2D_W{weight_id:02d}_C{cosmology_id}.npz',
+                    cov_3x2pt_2D_w00)
+
+                # invert and save
                 print('Inverting covariance matrices...')
                 start = time.perf_counter()
                 inv_cov_wl_2D_w00 = np.linalg.inv(cov_wl_2D_w00)
+                np.savez_compressed(
+                    f'{output_folder}/NoEll{nbl:03d}/inv_cov_wl_2D_W{weight_id:02d}_C{cosmology_id}.npz',
+                    inv_cov_wl_2D_w00)
+
                 inv_cov_2x2pt_2D_w00 = np.linalg.inv(cov_2x2pt_2D_w00)
+                np.savez_compressed(
+                    f'{output_folder}/NoEll{nbl:03d}/inv_cov_2x2pt_2D_W{weight_id:02d}_C{cosmology_id}.npz',
+                    inv_cov_2x2pt_2D_w00)
+
                 inv_cov_3x2pt_2D_w00 = np.linalg.inv(cov_3x2pt_2D_w00)
+                np.savez_compressed(
+                    f'{output_folder}/NoEll{nbl:03d}/inv_cov_3x2pt_2D_W{weight_id:02d}_C{cosmology_id}.npz',
+                    inv_cov_3x2pt_2D_w00)
                 print(f'...done in {time.perf_counter() - start:.2f} seconds')
 
                 # save the covariance for 3x2pt (used to compute sigmas_w00) and the inverse covariance for the
                 # sliced cases (used to compute the chi2)
-                np.savez_compressed(
-                    f'{output_folder}/NoEll{nbl:03d}/cov_3x2pt_2D_W{weight_id:02d}_C{cosmology_id}.npz',
-                    cov_3x2pt_2D_w00)
-                np.savez_compressed(
-                    f'{output_folder}/NoEll{nbl:03d}/inv_cov_wl_2D_W{weight_id:02d}_C{cosmology_id}.npz',
-                    inv_cov_wl_2D_w00)
-                np.savez_compressed(
-                    f'{output_folder}/NoEll{nbl:03d}/inv_cov_2x2pt_2D_W{weight_id:02d}_C{cosmology_id}.npz',
-                    inv_cov_2x2pt_2D_w00)
-                np.savez_compressed(
-                    f'{output_folder}/NoEll{nbl:03d}/inv_cov_3x2pt_2D_W{weight_id:02d}_C{cosmology_id}.npz',
-                    inv_cov_3x2pt_2D_w00)
 
             else:
                 cov_3x2pt_2D_w00 = np.load(f'{output_folder}/NoEll{nbl:03d}/cov_3x2pt_2D_W00_C13.npz')['arr_0']

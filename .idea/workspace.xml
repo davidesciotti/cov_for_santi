@@ -6,6 +6,7 @@
   <component name="ChangeListManager">
     <list default="true" id="06c8d5ba-4700-4a0f-b633-fe7ef74f103e" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bin/cov_weightedtest.py" beforeDir="false" afterPath="$PROJECT_DIR$/bin/cov_weightedtest.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
